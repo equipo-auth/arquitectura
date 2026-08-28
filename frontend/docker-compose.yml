@@ -1,0 +1,29 @@
+# ============================================================================
+# docker-compose.yml — front-end en Docker
+# ----------------------------------------------------------------------------
+# Este archivo levanta SOLO el front. Los 9 microservicios y el API Gateway
+# se levantan por separado, cada uno con su propio docker-compose (uno por
+# grupo/equipo de backend).
+#
+# Para que el front (corriendo en este contenedor) pueda llamar al Gateway
+# (corriendo en OTRO contenedor, de otro docker-compose), ambos deben estar
+# conectados a la MISMA red de Docker. Ver la sección de Docker en el
+# README para los detalles de cómo se conecta esa red compartida.
+# ============================================================================
+
+services:
+  front:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+    networks:
+      - plataforma-eventos-net
+
+networks:
+  # Red externa: debe ser creada una sola vez (ver README) y compartida por
+  # el front, el Gateway y los 9 microservicios, cada uno desde su propio
+  # docker-compose.
+  plataforma-eventos-net:
+    external: true
