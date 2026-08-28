@@ -1,6 +1,6 @@
-# Arquitectura Monorepo - TITEC (Equipo Auth)
+# Arquitectura - TITEC (Equipo Auth)
 
-Este repositorio contiene la estructura base del microservicio de Autenticación, dividido en Backend (NestJS) y Frontend (React/Vite).
+Este repositorio contiene la estructura base del microservicio de Autenticación, dividido en Backend (NestJS) y Frontend (React).
 
 ## Cómo levantar el proyecto en local
 
