@@ -56,3 +56,10 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 private.key
 *.key
+
+# Ocultar
+.agents/
+.claude/
+.cursor/
+.devin/
+
