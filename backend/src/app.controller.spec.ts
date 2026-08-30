@@ -14,9 +14,12 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('health', () => {
+    it('should return health status', () => {
+      const health = appController.checkHealth();
+      expect(health.status).toBe('OK');
+      expect(health.message).toBe('Auth funcionando');
     });
   });
 });
+
