@@ -7,36 +7,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Rol {
-  COMPRADOR
-  STAFF
-  ORGANIZADOR
-  ADMIN
+model User {
+  uuid               String   @id @default(uuid()) @db.Uuid
+  rut                String   @unique @db.VarChar(20)
+  email              String   @unique @db.VarChar(255)
+  password_hash      String   @db.VarChar(255)
+  nombre             String   @db.VarChar(150)
+  rol                String   @db.VarChar(50)
+  token_version      Int      @default(0)
+  cambio_obligatorio Boolean  @default(false)
+  creado_por_id      String?  @db.Uuid
+  created_at         DateTime @default(now()) @db.Timestamptz
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  creador      User?   @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [uuid])
+  subordinados User[]  @relation("JerarquiaUsuarios")
+
+  password_reset_tokens PasswordResetToken[]
+  revocations_received   SessionRevocada[]    @relation("TargetUser")
+  revocations_performed  SessionRevocada[]    @relation("RevokedBy")
+
+  @@map("users")
 }
 
-model Usuario {
-  id                  String   @id @default(uuid()) @db.Uuid 
-  rut                 String   @unique
-  nombre              String
-  email               String   @unique
-  password_hash       String
-  rol                 Rol      @default(COMPRADOR)
-  token_version       Int      @default(0)
-  cambio_obligatorio  Boolean  @default(false)
-  creado_por_id       String?  @db.Uuid
-  creador             Usuario?  @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [id])
-  subordinados        Usuario[] @relation("JerarquiaUsuarios")
-  tokens_recuperacion TokenRecuperacion[]
-  fecha_creacion      DateTime @default(now())
-  fecha_actualizacion DateTime @updatedAt
+model PasswordResetToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  user_uuid  String    @db.Uuid
+  token_hash String    @unique @db.VarChar(255)
+  expires_at DateTime  @db.Timestamptz
+  used_at    DateTime? @db.Timestamptz
+  created_at DateTime  @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [user_uuid], references: [uuid], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
-model TokenRecuperacion {
-  id         String   @id @default(uuid()) @db.Uuid
-  token      String   @unique 
-  usuario_id String   @db.Uuid
-  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
-  expira_en  DateTime 
-  usado      Boolean  @default(false) 
-  creado_el  DateTime @default(now())
+model SessionRevocada {
+  id             String   @id @default(uuid()) @db.Uuid
+  target_user_id String   @db.Uuid
+  revoked_by     String   @db.Uuid
+  reason         String   @db.Text
+  revoked_at     DateTime @default(now()) @db.Timestamptz
+
+  target_user     User @relation("TargetUser", fields: [target_user_id], references: [uuid], onDelete: Cascade)
+  revoked_by_user User @relation("RevokedBy", fields: [revoked_by], references: [uuid], onDelete: Cascade)
+
+  @@map("session_revocada")
 }
+
