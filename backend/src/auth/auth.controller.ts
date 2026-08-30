@@ -1,42 +1,102 @@
-import { Controller, Post, Body, Res } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Headers,
+  Res,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { ProvisionDto } from './dto/provision.dto';
+import { RecoverDto } from './dto/recover.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RevokeSessionDto } from './dto/revoke-session.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { RolesGuard } from './roles.guard';
+import { Roles } from './roles.decorator';
 
-@Controller('api/auth')
+@Controller()
 export class AuthController {
-  // Conectar el servicio AuthService para poder usar las funciones
   constructor(private readonly authService: AuthService) {}
 
-  //Aqui añade los endpoints, usa @Body() para recibir los datos
-  //del frontend y @Res() para enviar la cookie
-  
-
-  // POST /api/auth/register
-  @Post('register')
-  async register(@Body() body: any) {
-    // Aqui pones la lógica para recibir el id,rut, email, etc
-    // Guardalorlo en Neon DB usando Prisma y encriptar password con bcrypt
-    return { message: 'Endpoint de registro listo para empezar a programarlo'};
+  // HU-B1: API de Registro (POST /api/auth/register)
+  @Post('api/auth/register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
-  // POST /api/auth/login
-  @Post('login')
-  async login(@Body() body: any, @Res({ passthrough: true}) response: Response) {
-    // Aqui verificas el bcrypt, firmas el JWT y seteas la cookie HttpOnly
-    // Recuerda que el token no se manda en el body, se manda en la cookie
-  return { message: 'Endpoint de login listo para programarlo' };
-  } 
+  // HU-B2: API de Login (POST /api/auth/login)
+  @Post('api/auth/login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.authService.login(dto, response);
+  }
 
-  // POST /api/auth/recover
-  @Post('recover')
-  async recover(@Body() body: any) {
-    // 1) Validar que el email exista en la BD 
-    // 2) Generar el TokenRecuperación y guardarlo asociado al usuario
-    // 3) Arma la URL temporal: estilo https://[URL_DEL_FRONT]/recover?token=xyz
-    // 4) Recuerda Emitir el evento (ej: 'enviar_correo_recuperacion') a la cola de notificaciones
-    // mandando el email del usuario y la URL temporal
-    return { 
-      status: 'OK',
-      message: 'Endpoint de recuperar la contraseña listo para programarlo'};
+  // HU-B3: API de Cierre de Sesión (POST /api/auth/logout)
+  @Post('api/auth/logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@Res({ passthrough: true }) response: Response) {
+    return this.authService.logout(response);
+  }
+
+  // HU-B4: API de Provisión de Cuentas (POST /api/auth/provision)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'ORGANIZADOR')
+  @Post('api/auth/provision')
+  @HttpCode(HttpStatus.CREATED)
+  async provisionUser(@Body() dto: ProvisionDto, @Req() req: any) {
+    return this.authService.provisionUser(dto, req.user);
+  }
+
+  // HU-B5: Solicitud de Recuperación de Contraseña (POST /api/auth/recover)
+  @Post('api/auth/recover')
+  @HttpCode(HttpStatus.OK)
+  async recoverPassword(@Body() dto: RecoverDto) {
+    return this.authService.recoverPassword(dto);
+  }
+
+  // HU-B5: Restablecimiento de Contraseña (POST /api/auth/reset-password)
+  @Post('api/auth/reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  // HU-B6: Consulta Interna de Identidad (GET /api/auth/internal/user/:id)
+  @Get('api/auth/internal/user/:id')
+  @HttpCode(HttpStatus.OK)
+  async getInternalUser(
+    @Param('id') userId: string,
+    @Headers('x-api-key') apiKey: string,
+  ) {
+    return this.authService.getInternalUser(userId, apiKey);
+  }
+
+  // HU-B7: Endpoint Público JWKS (GET /.well-known/jwks.json)
+  @Get('.well-known/jwks.json')
+  @HttpCode(HttpStatus.OK)
+  async getJwks() {
+    return this.authService.getJwks();
+  }
+
+  // HU-B8: Revocación Administrativa de Sesión / Botón de Pánico (POST /api/auth/revoke)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'ORGANIZADOR')
+  @Post('api/auth/revoke')
+  @HttpCode(HttpStatus.OK)
+  async revokeSession(@Body() dto: RevokeSessionDto, @Req() req: any) {
+    return this.authService.revokeSession(dto, req.user);
   }
 }
