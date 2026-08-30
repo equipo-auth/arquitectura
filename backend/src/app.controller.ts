@@ -1,12 +1,19 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
 
-@Controller()
+//Definir todas las rutas sean con /api
+@Controller('api')
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+    
+  // Crear la ruta "health" para saber si el servidor no se ha caido
+  @Get('health') 
+  checkHealth() {
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+    return {
+      status: 'OK',
+      message: 'Auth funcionando',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString() //Hora exacta del servidor
+    };
   }
+  
 }

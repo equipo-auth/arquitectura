@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  COMPRADOR
+  STAFF
+  ORGANIZADOR
+  ADMIN
+}
+
+model Usuario {
+  id                  String   @id @default(uuid()) @db.Uuid 
+  rut                 String   @unique
+  nombre              String
+  email               String   @unique
+  password_hash       String
+  rol                 Rol      @default(COMPRADOR)
+  token_version       Int      @default(0)
+  cambio_obligatorio  Boolean  @default(false)
+  creado_por_id       String?  @db.Uuid
+  creador             Usuario?  @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [id])
+  subordinados        Usuario[] @relation("JerarquiaUsuarios")
+  tokens_recuperacion TokenRecuperacion[]
+  fecha_creacion      DateTime @default(now())
+  fecha_actualizacion DateTime @updatedAt
+}
+
+model TokenRecuperacion {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique 
+  usuario_id String   @db.Uuid
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  expira_en  DateTime 
+  usado      Boolean  @default(false) 
+  creado_el  DateTime @default(now())
+}
