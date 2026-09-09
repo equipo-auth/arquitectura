@@ -1,6 +1,6 @@
-#  Equipo 2: Autenticación (Auth)
+# Equipo 2: Autenticación (Auth)
 
-##  Miembros del Equipo
+## Miembros del Equipo
 
 | Nombre | Rol |
 | :--- | :--- |
@@ -11,27 +11,27 @@
 
 ---
 
-##  Épica del microservicio
-Como plataforma, necesitamos un microservicio de autenticación desacoplado que permita a compradores registrarse e iniciar sesión de forma segura, y a organizadores y staff acceder a paneles de gestión con controles de seguridad reforzados. 
+## Épica del microservicio
+Como plataforma, necesitamos un microservicio de autenticación desacoplado que permita a compradores registrarse e iniciar sesión de forma segura, y a organizadores y staff (provisionados manualmente por administración) acceder a paneles de gestión con controles de seguridad reforzados. 
 
 Para garantizar la integridad de las credenciales, la trazabilidad de los accesos, la resistencia a ataques de fuerza bruta y enumeración, y la emisión de tokens de identidad que las demás células del sistema puedan verificar de forma autónoma, con la capacidad de revocar el acceso de una cuenta de forma inmediata cuando sea necesario.
 
 ---
 
-##  Reglas de Seguridad
+## Reglas de Seguridad
 * **Contraseñas:** hash Bcrypt.
 * **Identificadores:** UUID v4.
 * **Tokens:** JWT firmado con RS256, entregado vía cookie `HttpOnly; Secure; SameSite=Strict`.
 * **Roles y expiración:** 
   * Comprador (auto-registro, JWT 2h)
   * Organizador (lo provisiona el Administrador de Plataforma, JWT 12h)
-  * Staff (lo provisiona su propio Organizador, JWT 12h).
+  * Staff (lo provisiona el Administrador de Plataforma, JWT 12h).
 * **Revocación:** campo `token_version` en base de datos. Se incrementa al cambiar la clave o al ser revocado por un rol superior, invalidando de inmediato todos los JWT anteriores.
 * **Rate limiting:** 5 intentos fallidos (login comprador), 3 intentos fallidos (login administrativo), ventana de 15 minutos.
 
 ---
 
-##  Historias de Usuario: Frontend
+## Historias de Usuario: Frontend
 
 ### HU-F1: Registro de Comprador
 * **Historia:** Como visitante no registrado, quiero crear una cuenta con mis datos personales y una contraseña, para poder comprar entradas a eventos en la plataforma.
@@ -89,6 +89,7 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 * **Escenario: Carga exclusiva del formulario:** dado que un usuario navega a /admin/login cuando la ruta carga entonces solo se despliega el formulario de acceso administrativo
 * **Escenario: Intento con rol incorrecto:** dado un intento de login en /admin/login con una cuenta rol "comprador" cuando se valida en el backend entonces responde 403 Forbidden y se rechaza el acceso en la vista
 * **Escenario: Redirección posterior al login:** dado un login exitoso cuando el backend responde con la cookie de sesión entonces se redirige al módulo de gestión o check-in correspondiente
+* **Escenario: Intercepción por Primer Inicio (Nuevo):** dado un login de Staff/Organizador con credenciales válidas cuando el backend informa que la cuenta requiere cambio de clave (`primer_inicio=true`) entonces el frontend retiene la redirección al panel y despliega obligatoriamente la vista de "Actualizar Contraseña".
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
@@ -127,7 +128,7 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 
 ---
 
-##  Historias de Usuario: Backend
+## Historias de Usuario: Backend
 
 ### HU-B1: API de Registro
 * **Historia:** Como sistema de autenticación, quiero registrar nuevos usuarios validando unicidad y encriptando su contraseña, para garantizar la integridad de las credenciales almacenadas.
@@ -156,13 +157,14 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ### HU-B2: API de Login
 * **Historia:** Como sistema de autenticación, quiero validar credenciales y emitir un JWT firmado con RS256 vía cookie segura, con expiración según el rol, para habilitar sesiones autenticadas sin exponer el token al cliente.
 * **Microservicio dueño:** Auth (Backend)
-* **Depende de:** Ninguno
+* **Depende de:** Infraestructura (Keycloak)
 
 **Criterios de Aceptación:**
 * **Escenario: Prevención de descubrimiento de cuentas:** dado un email inexistente o contraseña incorrecta cuando se procesa entonces responde 401 con el mismo mensaje y tiempo de respuesta en ambos casos
 * **Escenario: Expiración por roles:** dado un login exitoso de Comprador, Organizador o Staff cuando se emite el JWT entonces expira en 2 horas para el comprador, y en 12 horas para los perfiles administrativos
 * **Escenario: Seguridad del Token:** dado cualquier login exitoso cuando se arma el payload y se entrega entonces contiene exclusivamente sub, rol y token_version, entregado únicamente vía cookie HttpOnly; Secure; SameSite=Strict
 * **Escenario: Bloqueo por intentos fallidos:** dado el control de intentos en una ventana de 15 minutos cuando se recibe el 6to intento (comprador) o el 4to (administrativo) entonces el sistema responde HTTP 429
+* **Escenario: Intercepción de Primer Inicio:** dado un usuario administrativo que ingresa credenciales temporales válidas cuando Keycloak exige la acción requerida `UPDATE_PASSWORD` entonces Auth retiene la emisión de la cookie JWT y responde con un estado indicando al Frontend que debe redirigir a la vista de cambio de clave.
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
@@ -199,14 +201,15 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ---
 
 ### HU-B4: API de Provisión de Cuentas (Organizador / Staff)
-* **Historia:** Como Administrador de Plataforma u Organizador, quiero crear cuentas del rol inmediatamente inferior al mío, para delegar acceso privilegiado de forma controlada.
+* **Historia:** Como Administrador de Plataforma, quiero crear manualmente cuentas para el Staff y Organizadores, para proveerles acceso oficial al sistema sin que pasen por el registro público.
 * **Microservicio dueño:** Auth (Backend)
-* **Depende de:** Ninguno
+* **Depende de:** Notificaciones (vía RabbitMQ) e Infraestructura (Keycloak)
 
 **Criterios de Aceptación:**
-* **Escenario: Control de jerarquía:** dado un Administrador de Plataforma o un Organizador cuando crean una cuenta entonces el Administrador solo puede asignar el rol Organizador, y el Organizador solo el rol Staff (asociado a su propio UUID)
-* **Escenario: Bloqueo de permisos:** dado un solicitante sin autoridad sobre el rol destino cuando lo intenta provisionar entonces responde 403 Forbidden
-* **Escenario: Contraseña temporal:** dado que la cuenta administrativa se crea cuando se genera entonces recibe una contraseña temporal con cambio obligatorio en el primer login
+* **Escenario: Creación administrativa en Keycloak:** dado un Administrador de Plataforma cuando registra a un nuevo miembro entonces Auth utiliza la API interna de Keycloak para crear el usuario y asignarle el rol correspondiente (Organizador o Staff), abstrayendo esta complejidad del Frontend.
+* **Escenario: Bloqueo de permisos:** dado un usuario sin privilegios de administrador cuando intenta acceder a este endpoint de provisión entonces el sistema responde 403 Forbidden.
+* **Escenario: Contraseña temporal y Acción Requerida:** dado que la cuenta se aprovisiona en Keycloak cuando se genera entonces Auth le asigna una clave temporal configurada como no permanente y activa la acción requerida de cambio de clave (`UPDATE_PASSWORD`), asegurando que Keycloak rechace el acceso final hasta que se actualice.
+* **Escenario: Delegación de Notificaciones:** dado una cuenta creada exitosamente cuando Keycloak confirma la creación entonces Auth prohíbe el envío de correos nativos y publica el evento en el exchange `auth_events` de RabbitMQ con el JSON (`email`, `nombre`, `password_temporal`) para que el equipo de Notificaciones se encargue.
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
@@ -224,11 +227,12 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ### HU-B5: Recuperación de Contraseña (Backend)
 * **Historia:** Como sistema de autenticación, quiero generar un token de restablecimiento de un solo uso y coordinar el envío con Notificaciones, para permitir la recuperación segura de acceso.
 * **Microservicio dueño:** Auth (Backend)
-* **Depende de:** Notificaciones
+* **Depende de:** Notificaciones (vía RabbitMQ)
 
 **Criterios de Aceptación:**
 * **Escenario: Solicitud ofuscada:** dado cualquier email recibido cuando se procesa la solicitud entonces siempre responde 200 OK, exista o no la cuenta
 * **Escenario: Vigencia del token:** dado un token generado cuando se persiste entonces expira en 15 minutos, es de un solo uso y responde 401/410 si se reutiliza
+* **Escenario: Publicación asíncrona de evento:** dado un token de recuperación generado exitosamente cuando se debe notificar al usuario entonces Auth publica el evento `auth.clave.recuperar` en el canal `auth_events` de RabbitMQ, enviando únicamente el `email` y la `url_recuperacion` (Fire-and-Forget).
 * **Escenario: Invalidación de sesiones:** dado un cambio de clave exitoso cuando se confirma en base de datos entonces token_version se incrementa en +1, invalidando intencionalmente todas las sesiones activas previas
 
 **Definición de Terminado (equipo):**
@@ -291,14 +295,38 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ---
 
 ### HU-B8: Revocación Administrativa de Sesión ("Botón de Pánico")
-* **Historia:** Como Administrador de Plataforma u Organizador, quiero forzar la invalidación de las sesiones de una cuenta bajo mi jerarquía, para cortar el acceso ante una cuenta comprometida sin esperar a que expire su JWT.
+* **Historia:** Como Administrador de Plataforma, quiero forzar la invalidación de las sesiones de una cuenta en el sistema, para cortar el acceso ante una cuenta comprometida sin esperar a que expire su JWT.
 * **Microservicio dueño:** Auth (Backend)
 * **Depende de:** Ninguno
 
 **Criterios de Aceptación:**
-* **Escenario: Control jerárquico:** dado un solicitante sin autoridad sobre el UUID objetivo cuando lo intenta entonces responde 403 Forbidden
+* **Escenario: Control jerárquico:** dado un solicitante sin privilegios de administrador cuando lo intenta entonces responde 403 Forbidden
 * **Escenario: Invalidación forzada:** dado una solicitud autorizada cuando se procesa entonces incrementa en +1 el token_version del usuario, haciendo que cualquier JWT anterior falle de inmediato al verificarse
 * **Escenario: Separación de responsabilidades:** dado que este endpoint es de backend cuando se implementa entonces Auth solo expone la API y no es responsable de la interfaz gráfica
+
+**Definición de Terminado (equipo):**
+- [ ] PR revisado
+- [ ] pruebas unitarias
+- [ ] linter ok
+- [ ] API documentada
+
+**Definición de Terminado (proyecto):**
+- [ ] pruebas de contrato ok
+- [ ] desplegado en integración
+- [ ] docs centrales al día
+
+---
+
+### HU-B9: API de Cambio de Clave Obligatorio (Primer Inicio)
+* **Historia:** Como miembro del Staff u Organizador en su primer inicio de sesión, quiero poder establecer mi contraseña definitiva, para asegurar mi cuenta y obtener acceso total al sistema.
+* **Microservicio dueño:** Auth (Backend)
+* **Depende de:** Infraestructura (Keycloak) y Notificaciones (RabbitMQ)
+
+**Criterios de Aceptación:**
+* **Escenario: Actualización de credenciales:** dado un usuario con la acción requerida de cambio de clave (`UPDATE_PASSWORD`) que envía su nueva contraseña al endpoint `POST /api/auth/cambiar-clave` cuando el sistema la procesa entonces actualiza la contraseña directamente en Keycloak.
+* **Escenario: Liberación de la cuenta:** dado un cambio de clave exitoso cuando Keycloak confirma la actualización entonces el backend elimina la restricción, permitiendo que el usuario reciba su cookie JWT final en su próximo intento de login.
+* **Escenario: Notificación de seguridad:** dado que la contraseña fue actualizada cuando el proceso termina entonces Auth publica el evento `auth.staff.primer_inicio_completado` en RabbitMQ para informar al usuario que su cuenta está configurada.
+* **Escenario: Seguridad de la nueva clave:** dado que se recibe una nueva contraseña cuando se intenta guardar entonces debe cumplir con las mismas políticas de seguridad exigidas en el registro público.
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
