@@ -1,62 +1,123 @@
-# CONTRATO_NOTIFICACIONES_AUTH.md 
-**Equipo Proveedor:** Autenticación
-
-**Equipo Consumidor Principal:** Notificaciones
-
-**Tecnología:** RabbitMQ
-
----
-## 1. Propósito
-
-Este documento define la estructura de los mensajes que el microservicio de Autenticación (Auth) enviará a RabbitMQ cuando ocurran cosas importantes. 
-
-El objetivo principal es avisarle a los otros microservicios (especialmente Notificaciones) para que puedan reaccionar. Auth **no se responsabiliza** de armar el diseño de los correos ni de enviarlos al usuario final; nuestra responsabilidad termina al dejar el mensaje en el canal de RabbitMQ.
+## Contrato de interfaz: Auth ↔ Notificaciones
+**Versión:** 1.0
+**Equipo consumidor:** Notificaciones
+**Equipo proveedor:** Auth
+**Basado en:** HU7 - Enviar correo de recuperación de contraseña
 
 ---
+### 1. Propósito
+Notificaciones necesita recibir las solicitudes de recuperación de contraseña y cuando cuenta de Staff sea creada para enviar al usuario el correo correspondiente. Auth es responsable de enviar los datos correspondientes para el envío del correo.
 
-## 2. Eventos Definidos (Fase 1 - Acordado)
+---
+### 2. Operación: Publicar evento recuperacion_cuenta y cuenta_staff
 
-### 2.1 Recuperación de Contraseña
+#### 2.1 Descripción
+Publica un evento cuando un usuario solicita recuperar su contraseña y publica otro evento cuando se crea una cuenta de tipo staff.
 
-Este evento ocurre cuando un usuario solicita recuperar su clave y Auth le genera exitosamente un código temporal. 
+#### 2.2 Quién la expone
+Equipo Auth.
 
-*   **Buzón/Canal sugerido en RabbitMQ:** `auth_events`
-*   **Etiqueta del mensaje sugerida:** `auth.clave.recuperar`
+#### 2.3 Quién la consume
+Equipo Notificaciones, en el momento en que Auth procesa una solicitud de recuperación de contraseña o crea una cuenta de staff.
 
-**Contenido del Mensaje (Acuerdo Vigente):**
+#### 2.4 Endpoint propuesto
+[EVENTO ASÍNCRONO]
+(La comunicación se realiza mediante un broker de mensajes en formato de evento asíncrono).
 
+#### 2.5 Request (lo que se envía)
+
+**Evento 1: `recuperacion_cuenta`**
 | Campo | Tipo | Obligatorio | Descripción |
 | :--- | :--- | :--- | :--- |
-| `email` | string | Sí | Correo electrónico del usuario que solicita la recuperación. |
-| `url_recuperacion` | string | Sí | URL completa que el usuario debe pinchar. Ya incluye el token temporal. |
+| Id_usuario | string | Sí | Identificador del usuario que solicitó la recuperación. |
+| email_destino | string | Sí | Correo al cual se debe enviar el mensaje. |
+| url | string | Sí | Enlace de recuperación. |
 
-**Ejemplo del JSON que enviará Auth:**
+**Evento 2: `cuenta_staff`**
+| Campo | Tipo | Obligatorio | Descripción |
+| :--- | :--- | :--- | :--- |
+| email_destino | string | Sí | Correo al cual se debe enviar el mensaje. |
+| url | string | Sí | Enlace de configuración de cuenta temporal. |
+
+**Ejemplos:**
+### recuperacion_cuenta
 ```json
+
 {
-  "email": "juan.perez@ejemplo.cl",
-  "url_recuperacion": "[https://frontend.titec.cl/reset?token=abc123xyz789](https://frontend.titec.cl/reset?token=abc123xyz789)"
+  "Id_usuario": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "email_destino": "a@gmail.com",
+  "url": "https://ticketu.cl/restablecer?token=abc123xyz"
 }
 ```
-**Lo que debe hacer el equipo de Notificaciones:**
+### recuperacion_cuenta
+```json
+{
+  "email_destino": "staff@gmail.com",
+  "url": "https://ticketu.cl/restablecer?token=abc123xyz"
+}
+```
+## 2.6 Response (lo que se recibe)
 
-1. Estar leyendo los mensajes que llegan con esa etiqueta en RabbitMQ.
-2. Sacar el `email` y la `url_recuperacion` del JSON.
-3. Armar la plantilla visual del correo y ponerle el link.
-4. Enviar el correo electrónico usando su propio sistema.
+Para ambos eventos son enviados los datos.
 
----
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| `email_destino` | string | Sí | Correo al que se envió el mensaje. |
+| `estado_envio` | string | Sí | Resultado del envío: exitoso o error. |
+| `error_envio` | string | No | En caso de existir un error se informará por qué se produjo. |
 
-## 3. Reglas Generales
+### Ejemplo
 
-* **Formato:** Todos los mensajes se envían simplemente como texto en formato `JSON`.
-* **Qué pasa si hay fallos (Reintentos):** Auth solo envía el mensaje a RabbitMQ y sigue trabajando (no se queda esperando respuesta). Si el microservicio de Notificaciones justo está apagado, ellos deben configurar RabbitMQ para que el mensaje no se pierda y se intente enviar de nuevo más tarde.
-* **Mensajes repetidos:** Por cortes de internet o fallos de red, a veces Auth podría llegar a enviar el mismo mensaje dos veces. El equipo de Notificaciones debe tener cuidado de no mandarle el mismo correo repetido a la misma persona.
+```json
+{
+  "email_destino": "a@gmail.com",
+  "estado_envio": "exitoso"
+}
+```
+### Ejemplo de Response con Error
 
----
+```json
+{
+  "email_destino": "a@gmail.com",
+  "estado_envio": "error",
+  "error_envio": "Rechazo del servidor SMTP de destino"
+}
+```
+## 2.7 Códigos de error
 
-## 4. Pendientes a acordar con el equipo de Notificaciones
+Al tratarse de comunicación asíncrona, no se utilizan códigos HTTP para la respuesta del evento.
 
-- [ ] Confirmar infraestructura: nombre definitivo del canal (Exchange) y etiquetas a usar en RabbitMQ.
-- [ ] Informar y coordinar nuevo requerimiento (Creación de Staff): Auth ahora gestionará la creación manual de cuentas Staff. Acordar la estructura del JSON para que Notificaciones pueda enviarles su clave temporal y link de acceso.
-- [ ] Confirmar diferenciadores en el JSON: Acordar cómo distinguir los distintos tipos de avisos (ej. agregando un campo `"rol"` o `"evento"`) para que sepan exactamente qué plantilla de correo usar ante estos nuevos cambios.
-- [ ] Confirmar si requieren que emitamos un evento cuando se registre un Usuario normal (para correos de bienvenida/confirmación).
+Si el envío del correo falla, Notificaciones realizará hasta **3 intentos**. Si los tres intentos fallan, se registrará el error correspondiente.
+
+## 2.8 Tiempo de respuesta esperado (SLA)
+
+El evento debe ser publicado por Auth inmediatamente después de procesar la solicitud de recuperación, **≤ 5 segundos** hasta que Auth recibe confirmación de envío.
+
+## 3. Reglas de uso (lado consumidor)
+
+### `recuperacion_cuenta`
+
+- Notificaciones permanece suscrito al evento `recuperacion_cuenta`.
+- Genera y envía el correo utilizando la URL recibida.
+- Si el envío falla, realiza hasta **3 intentos** y registra el error si todos fallan.
+- Notifica a Auth si el envío se realizó de forma correcta o incorrecta.
+
+### `cuenta_staff`
+
+- Notificaciones permanece suscrito al evento `cuenta_staff`.
+- Genera y envía el correo utilizando la información y URL temporal recibida.
+- Si el envío falla, realiza hasta **3 intentos** y registra el error si todos fallan.
+- Notifica a Auth si el envío se realizó de forma correcta o incorrecta.
+
+## 4. Versionado y cambios
+
+Cualquier cambio en la estructura del evento debe ser versionado y comunicado con anticipación.
+
+Cambios que rompan compatibilidad (**breaking changes**) requieren un período de transición acordado entre ambos equipos.
+
+## 5. Dueños del contrato
+
+| Rol | Equipo | Contacto |
+|---|---|---|
+| Dueño del contrato | Auth | Diego Peña |
+| Consumidor principal | Notificaciones | Gabriela Herrera |
