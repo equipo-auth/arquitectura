@@ -49,7 +49,7 @@ Equipo Notificaciones, en el momento en que Auth procesa una solicitud de recupe
   "url": "https://ticketu.cl/restablecer?token=abc123xyz"
 }
 ```
-### recuperacion_cuenta
+### cuenta_staff
 ```json
 {
   "email_destino": "staff@gmail.com",
