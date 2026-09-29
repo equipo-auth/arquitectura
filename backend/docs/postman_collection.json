@@ -1,0 +1,65 @@
+{
+  "info": {
+    "name": "TITEC - Auth Microservice",
+    "description": "Casos de prueba de integración para Evaluación 1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Registro Comprador (Exitoso)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "http://localhost:10000/api/auth/registro", "protocol": "http", "host": ["localhost"], "port": "10000", "path": ["api", "auth", "registro"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Usuario Test\",\n  \"rut\": \"12.345.678-5\",\n  \"email\": \"test@test.com\",\n  \"password\": \"123456\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Registro Comprador (Duplicado)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "http://localhost:10000/api/auth/registro", "protocol": "http", "host": ["localhost"], "port": "10000", "path": ["api", "auth", "registro"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Usuario Test\",\n  \"rut\": \"12.345.678-5\",\n  \"email\": \"test@test.com\",\n  \"password\": \"123456\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Login (Credenciales Inválidas)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "http://localhost:10000/api/auth/login", "protocol": "http", "host": ["localhost"], "port": "10000", "path": ["api", "auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@test.com\",\n  \"password\": \"incorrecto\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Login (Exitoso)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "http://localhost:10000/api/auth/login", "protocol": "http", "host": ["localhost"], "port": "10000", "path": ["api", "auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@test.com\",\n  \"password\": \"123456\"\n}"
+        }
+      }
+    }
+  ]
+}
