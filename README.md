@@ -28,13 +28,16 @@ npm run start:dev
 ```
 ---
 
-## Miembros del Equipo
-| Nombre | Rol |
+## Miembros del Equipo y Roles (Evaluación 1)
+| Rol (Según Rúbrica) | Responsable(s) |
 | :--- | :--- |
-| BENJAMÍN DAVID ACEVEDO JORQUERA | Frontend |
-| RICARDO ANDRES GIL OTALVAREZ | Integración |
-| DIEGO ALEXANDER PEÑA GUTIÉRREZ | QA/Master |
-| NATANIEL ENRIQUE RIQUELME VERGARA | Backend/BD |
+| **Back End** | Nataniel Riquelme Vergara |
+| **Base de Datos** | Nataniel Riquelme Vergara |
+| **UI/UX (front end)** | Benjamín Acevedo Jorquera |
+| **Gestión** | Diego Peña Gutiérrez |
+| **Calidad** | Ricardo Gil Otalvarez, Diego Peña Gutiérrez |
+
+*(Nota: Ricardo Gil se encarga además de la **Integración** del proyecto según tabla de dependencias)*
 
 ---
 
