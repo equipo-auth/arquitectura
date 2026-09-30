@@ -11,7 +11,7 @@ model User {
   uuid               String   @id @default(uuid()) @db.Uuid
   rut                String   @unique @db.VarChar(20)
   email              String   @unique @db.VarChar(255)
-  password_hash      String?  @db.VarChar(255)
+  password_hash      String?  @db.VarChar(255) // Nulable para soportar integración con Keycloak (SSO) y registros donde no se almacena contraseña localmente
   nombre             String   @db.VarChar(150)
   rol                String   @db.VarChar(50)
   token_version      Int      @default(0)

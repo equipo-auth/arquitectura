@@ -18,7 +18,12 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
     "postinstall": "prisma skills sync || exit 0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@keycloak/keycloak-admin-client": "^26.7.4",
