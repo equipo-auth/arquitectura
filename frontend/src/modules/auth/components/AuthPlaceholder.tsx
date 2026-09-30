@@ -42,8 +42,8 @@ export default function AuthPlaceholder() {
     if (!nombre) nextErrors.nombre = "Ingresa tu nombre.";
     if (!isValidRut(rut)) nextErrors.rut = "Ingresa un RUT válido.";
     if (!isValidEmail(email)) nextErrors.email = "Ingresa un email válido.";
-    if (password.length < 6) {
-      nextErrors.password = "La contraseña debe tener al menos 6 caracteres.";
+    if (password.length < 8) {
+      nextErrors.password = "La contraseña debe tener al menos 8 caracteres.";
     }
 
     setErrors(nextErrors);
@@ -275,13 +275,13 @@ export default function AuthPlaceholder() {
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 aria-invalid={Boolean(errors.password)}
               />
               {errors.password ? (
                 <span className={styles.errorText}>{errors.password}</span>
               ) : (
-                <span className={styles.helper}>Debe tener al menos 6 caracteres.</span>
+                <span className={styles.helper}>Debe tener al menos 8 caracteres.</span>
               )}
             </div>
 
