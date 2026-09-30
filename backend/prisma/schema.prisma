@@ -7,85 +7,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Diccionario de Datos: Tabla 'users'
-/// Almacena a los usuarios registrados en el sistema, incluyendo compradores, staff y organizadores.
 model User {
-  /// UUID único generado automáticamente para cada usuario.
   uuid               String   @id @default(uuid()) @db.Uuid
-  /// RUT chileno con formato. Único en el sistema.
   rut                String   @unique @db.VarChar(20)
-  /// Correo electrónico único utilizado para login.
   email              String   @unique @db.VarChar(255)
-  /// Hash de la contraseña usando bcrypt.
-  password_hash      String   @db.VarChar(255)
-  /// Nombre completo del usuario.
+  password_hash      String?  @db.VarChar(255)
   nombre             String   @db.VarChar(150)
-  /// Rol del usuario (ej: 'comprador', 'organizador', 'staff').
   rol                String   @db.VarChar(50)
-  /// Versión del token usada para la revocación inmediata de JWTs activos.
   token_version      Int      @default(0)
-  /// Indica si el usuario debe cambiar su clave en el próximo login (primer inicio).
   cambio_obligatorio Boolean  @default(false)
-  /// UUID del usuario administrador que creó esta cuenta (si aplica).
   creado_por_id      String?  @db.Uuid
-  /// Fecha y hora de registro.
   created_at         DateTime @default(now()) @db.Timestamptz
-  /// Fecha y hora de la última actualización del registro.
   updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz
 
-  /// Usuario que creó esta cuenta.
-  creador      User?   @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [uuid])
-  /// Usuarios creados por esta cuenta.
-  subordinados User[]  @relation("JerarquiaUsuarios")
+  creador      User?  @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [uuid])
+  subordinados User[] @relation("JerarquiaUsuarios")
 
   password_reset_tokens PasswordResetToken[]
-  revocations_received   SessionRevocada[]    @relation("TargetUser")
-  revocations_performed  SessionRevocada[]    @relation("RevokedBy")
+  revocations_received  SessionRevocada[]    @relation("TargetUser")
+  revocations_performed SessionRevocada[]    @relation("RevokedBy")
 
   @@map("users")
 }
 
-/// Diccionario de Datos: Tabla 'password_reset_tokens'
-/// Almacena los tokens temporales (hash) solicitados para recuperar contraseñas.
 model PasswordResetToken {
-  /// UUID interno del registro.
   id         String    @id @default(uuid()) @db.Uuid
-  /// UUID del usuario que solicitó el token.
   user_uuid  String    @db.Uuid
-  /// Hash del token de recuperación para validación segura.
   token_hash String    @unique @db.VarChar(255)
-  /// Fecha y hora exacta de expiración del token (15 minutos).
   expires_at DateTime  @db.Timestamptz
-  /// Fecha y hora en la que fue utilizado (nulo si aún es válido).
   used_at    DateTime? @db.Timestamptz
-  /// Fecha y hora en que se solicitó el token.
   created_at DateTime  @default(now()) @db.Timestamptz
 
-  /// Relación con la tabla 'users'.
   user User @relation(fields: [user_uuid], references: [uuid], onDelete: Cascade)
 
   @@map("password_reset_tokens")
 }
 
-/// Diccionario de Datos: Tabla 'session_revocada'
-/// Bitácora para registrar la revocación forzada de sesiones por parte de administradores.
 model SessionRevocada {
-  /// UUID interno del registro de revocación.
   id             String   @id @default(uuid()) @db.Uuid
-  /// UUID del usuario al que se le revocó la sesión.
   target_user_id String   @db.Uuid
-  /// UUID del administrador que forzó la revocación.
   revoked_by     String   @db.Uuid
-  /// Motivo o razón de la revocación por auditoría.
   reason         String   @db.Text
-  /// Fecha y hora en que se ejecutó la acción.
   revoked_at     DateTime @default(now()) @db.Timestamptz
 
-  /// Usuario afectado.
   target_user     User @relation("TargetUser", fields: [target_user_id], references: [uuid], onDelete: Cascade)
-  /// Administrador ejecutor.
   revoked_by_user User @relation("RevokedBy", fields: [revoked_by], references: [uuid], onDelete: Cascade)
 
   @@map("session_revocada")
 }
-

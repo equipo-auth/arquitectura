@@ -1,102 +1,77 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Param,
-  Headers,
-  Res,
-  Req,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
-import { AuthService } from './auth.service';
+import { Controller, Post, Body, Res, HttpCode, HttpStatus, UnauthorizedException, Get, UseGuards, Req, Header } from '@nestjs/common';
 import { Response, Request } from 'express';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { ProvisionDto } from './dto/provision.dto';
-import { RecoverDto } from './dto/recover.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { RevokeSessionDto } from './dto/revoke-session.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { RolesGuard } from './roles.guard';
-import { Roles } from './roles.decorator';
+import { AuthGuard } from '@nestjs/passport';
+import { AuthService } from './auth.service';
+import { RegisterDto, LoginDto, UpdatePasswordDto } from './dto/auth.dto';
 
-@Controller()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  handleRequest(err: any, user: any, info: any) {
+    if (err || !user) {
+      console.warn(`[JwtAuthGuard] Bloqueo de acceso: ${info?.message || err?.message || 'Token inválido'}`);
+      throw err || new UnauthorizedException('Acceso no autorizado');
+    }
+    return user;
+  }
+}
+
+@Controller('api/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // HU-B1: API de Registro (POST /api/auth/register)
-  @Post('api/auth/register')
-  @HttpCode(HttpStatus.CREATED)
+  @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
-  // HU-B2: API de Login (POST /api/auth/login)
-  @Post('api/auth/login')
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    return this.authService.login(dto, response);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.login(dto);
+
+    if (result.requirePasswordChange) {
+      const rawToken = await this.authService.generatePasswordResetToken(result.user.uuid);
+
+      res.status(HttpStatus.FORBIDDEN); 
+      return { 
+        message: 'Acción requerida: Primer inicio, debe cambiar su clave.',
+        action: 'REDIRECT',
+        url: `/crear-clave?token=${rawToken}`
+      };
+    } 
+
+    res.cookie('jwt_token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', 
+      sameSite: 'strict',
+      maxAge: result.expiresInMs,
+    });
+
+    return { message: 'Inicio de sesión exitoso' };
   }
 
-  // HU-B3: API de Cierre de Sesión (POST /api/auth/logout)
-  @Post('api/auth/logout')
+  @Post('update-password')
   @HttpCode(HttpStatus.OK)
-  async logout(@Res({ passthrough: true }) response: Response) {
-    return this.authService.logout(response);
+  async updatePassword(@Body() dto: UpdatePasswordDto) {
+    return this.authService.updateStaffPassword(dto.token, dto.newPassword);
   }
 
-  // HU-B4: API de Provisión de Cuentas (POST /api/auth/provision)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'ORGANIZADOR')
-  @Post('api/auth/provision')
-  @HttpCode(HttpStatus.CREATED)
-  async provisionUser(@Body() dto: ProvisionDto, @Req() req: any) {
-    return this.authService.provisionUser(dto, req.user);
+  // HU-B6 y Contrato de Integración: Introspección Centralizada
+  @UseGuards(JwtAuthGuard)
+  @Get('validar-sesion')
+  @Header('Cache-Control', 'no-store')
+  async validarSesion(@Req() req) {
+    return this.authService.getPerfilValido(req.user.uuid);
   }
 
-  // HU-B5: Solicitud de Recuperación de Contraseña (POST /api/auth/recover)
-  @Post('api/auth/recover')
+  @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async recoverPassword(@Body() dto: RecoverDto) {
-    return this.authService.recoverPassword(dto);
-  }
-
-  // HU-B5: Restablecimiento de Contraseña (POST /api/auth/reset-password)
-  @Post('api/auth/reset-password')
-  @HttpCode(HttpStatus.OK)
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
-  }
-
-  // HU-B6: Consulta Interna de Identidad (GET /api/auth/internal/user/:id)
-  @Get('api/auth/internal/user/:id')
-  @HttpCode(HttpStatus.OK)
-  async getInternalUser(
-    @Param('id') userId: string,
-    @Headers('x-api-key') apiKey: string,
-  ) {
-    return this.authService.getInternalUser(userId, apiKey);
-  }
-
-  // HU-B7: Endpoint Público JWKS (GET /.well-known/jwks.json)
-  @Get('.well-known/jwks.json')
-  @HttpCode(HttpStatus.OK)
-  async getJwks() {
-    return this.authService.getJwks();
-  }
-
-  // HU-B8: Revocación Administrativa de Sesión / Botón de Pánico (POST /api/auth/revoke)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'ORGANIZADOR')
-  @Post('api/auth/revoke')
-  @HttpCode(HttpStatus.OK)
-  async revokeSession(@Body() dto: RevokeSessionDto, @Req() req: any) {
-    return this.authService.revokeSession(dto, req.user);
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('jwt_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+    
+    return { status: 'OK', message: 'Sesión cerrada localmente' };
   }
 }

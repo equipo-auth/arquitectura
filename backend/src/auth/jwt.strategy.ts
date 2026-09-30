@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { Request } from 'express';
-import { RsaKeyService } from './rsa-key.service';
+import { RsaKeyService } from './rsa-key.service'; // <-- Ruta corregida
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface JwtPayload {
@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         (req: Request) => {
           let token: string | null = null;
           if (req && req.cookies) {
-            token = req.cookies['auth_token'] || req.cookies['jwt'] || req.cookies['token'];
+            token = req.cookies['jwt_token'] || req.cookies['auth_token'] || req.cookies['jwt'] || req.cookies['token'];
           }
           if (!token) {
             token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
@@ -51,7 +51,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         nombre: true,
         rol: true,
         token_version: true,
-        cambio_obligatorio: true,
       },
     });
 

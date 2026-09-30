@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Middleware para parsear cookies HttpOnly
+  // Parsear cookies HttpOnly
   app.use(cookieParser());
 
   // Validación automática de DTOs
@@ -24,7 +24,6 @@ async function bootstrap() {
     origin: [
       'http://localhost:5173',
       'http://localhost:3000',
-      'https://illustrious-bienenstitch-b47d01.netlify.app',
       frontendUrl,
     ],
     credentials: true,
