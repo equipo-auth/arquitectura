@@ -1,4 +1,4 @@
-# CONTRATO_INTEGRACION_AUTH.md
+# Contrato de interfaz: Microservicios Core ↔ Auth
 
 **Equipo Proveedor:** Autenticación (Auth)  
 **Equipos Consumidores:** Todos los microservicios core (Check-in, Catálogo, Panel Organizador, Pagos, Reseñas, etc.)  
