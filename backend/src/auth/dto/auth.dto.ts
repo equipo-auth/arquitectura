@@ -39,3 +39,20 @@ export class UpdatePasswordDto {
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   newPassword: string;
 }
+
+export class RecoverDto {
+  @IsEmail({}, { message: 'El correo electrónico no es válido' })
+  @IsNotEmpty({ message: 'El correo es obligatorio' })
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  nueva_clave: string;
+}

@@ -2,7 +2,7 @@ import { Controller, Post, Body, Res, HttpCode, HttpStatus, UnauthorizedExceptio
 import { Response, Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, UpdatePasswordDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, UpdatePasswordDto, RecoverDto, ResetPasswordDto } from './dto/auth.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth } from '@nestjs/swagger';
 
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -65,6 +65,28 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Clave actualizada en Keycloak y base de datos.' })
   async updatePassword(@Body() dto: UpdatePasswordDto) {
     return this.authService.updateStaffPassword(dto.token, dto.newPassword);
+  }
+
+  @Post('recover')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'HU-B5: Solicitar recuperación de contraseña' })
+  @ApiResponse({ status: 200, description: 'Respuesta genérica (200 OK) para evitar enumeración de usuarios.' })
+  async recoverPassword(@Body() recoverDto: RecoverDto) {
+    // Falla silenciosa y asíncrona para no exponer tiempos de respuesta ni confirmar el email
+    this.authService.processRecovery(recoverDto.email).catch(console.error);
+    
+    return { message: 'Si el correo existe, se han enviado las instrucciones.' };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'HU-B5: Restablecer contraseña con token de un solo uso' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada y sesiones anteriores invalidadas mediante token_version.' })
+  @ApiResponse({ status: 401, description: 'Token inválido o ya consumido.' })
+  @ApiResponse({ status: 410, description: 'El token ha expirado.' })
+  async resetPassword(@Body() resetDto: ResetPasswordDto) {
+    await this.authService.resetPassword(resetDto.token, resetDto.nueva_clave);
+    return { message: 'Contraseña actualizada exitosamente.' };
   }
 
   @UseGuards(JwtAuthGuard)

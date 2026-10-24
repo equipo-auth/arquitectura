@@ -11,17 +11,17 @@ model User {
   uuid               String   @id @default(uuid()) @db.Uuid
   rut                String   @unique @db.VarChar(20)
   email              String   @unique @db.VarChar(255)
-  password_hash      String?  @db.VarChar(255) // Nulable para soportar integración con Keycloak (SSO) y registros donde no se almacena contraseña localmente
+  password_hash      String?  @db.VarChar(255) // Nulable para soportar integración con Keycloak (SSO)
   nombre             String   @db.VarChar(150)
   rol                String   @db.VarChar(50)
-  token_version      Int      @default(0)
+  token_version      Int      @default(0) // Utilizado para invalidar JWTs tras cambio de clave
   cambio_obligatorio Boolean  @default(false)
   creado_por_id      String?  @db.Uuid
   created_at         DateTime @default(now()) @db.Timestamptz
   updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz
 
-  creador      User?  @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [uuid])
-  subordinados User[] @relation("JerarquiaUsuarios")
+  creador            User?  @relation("JerarquiaUsuarios", fields: [creado_por_id], references: [uuid])
+  subordinados       User[] @relation("JerarquiaUsuarios")
 
   password_reset_tokens PasswordResetToken[]
   revocations_received  SessionRevocada[]    @relation("TargetUser")
@@ -35,7 +35,7 @@ model PasswordResetToken {
   user_uuid  String    @db.Uuid
   token_hash String    @unique @db.VarChar(255)
   expires_at DateTime  @db.Timestamptz
-  used_at    DateTime? @db.Timestamptz
+  used_at    DateTime? @db.Timestamptz // Registra cuándo se consumió (Token de un solo uso)
   created_at DateTime  @default(now()) @db.Timestamptz
 
   user User @relation(fields: [user_uuid], references: [uuid], onDelete: Cascade)

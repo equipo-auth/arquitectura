@@ -2,6 +2,7 @@ import { Injectable, ConflictException, UnauthorizedException, Logger } from '@n
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { KeycloakService } from '../keycloak/keycloak.service';
+import { NotificationService } from './auth.notificaciones';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import * as crypto from 'crypto';
@@ -14,6 +15,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private keycloakService: KeycloakService,
+    private notificationService: NotificationService, // Añadido para RabbitMQ
   ) {}
 
   async register(dto: RegisterDto) {
@@ -139,6 +141,61 @@ export class AuthService {
     });
 
     return { message: 'Contraseña actualizada correctamente. Ya puede iniciar sesión.' };
+  }
+
+  // HU-B5: Procesar solicitud de recuperación para enviarla a Notificaciones
+  async processRecovery(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return; // Falla silenciosa para evitar enumeración
+
+    // Reutilizamos tu método de generación de tokens hasheados en DB
+    const rawToken = await this.generatePasswordResetToken(user.uuid);
+    const recoveryUrl = `https://ticketu.cl/restablecer?token=${rawToken}`;
+
+    this.notificationService.sendRecoveryEmail({
+      Id_usuario: user.uuid,
+      email_destino: user.email,
+      url: recoveryUrl,
+    });
+
+    this.logger.log(`Evento de recuperación enviado a RabbitMQ para: ${email}`);
+  }
+
+  // HU-B5: Validar token y cambiar contraseña (para usuarios COMPRADOR)
+  async resetPassword(token: string, nuevaClave: string) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const resetRecord = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        token_hash: tokenHash,
+        used_at: null,
+        expires_at: { gt: new Date() },
+      },
+    });
+
+    if (!resetRecord) {
+      throw new UnauthorizedException('El enlace ha expirado o es inválido.');
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(nuevaClave, saltRounds);
+
+    // Transacción para asegurar consistencia
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { uuid: resetRecord.user_uuid },
+        data: {
+          password_hash: hashedPassword,
+          token_version: { increment: 1 }, // Invalidar sesiones antiguas
+        },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetRecord.id },
+        data: { used_at: new Date() }, // Quemar token
+      }),
+    ]);
+
+    this.logger.log(`Contraseña restablecida exitosamente para UUID: ${resetRecord.user_uuid}`);
   }
 
   // HU-B6: Obtener perfil normalizado según Contrato de Integración
