@@ -17,8 +17,10 @@ cp .env.example .env.local   # copia las variables de entorno
 npm run dev        # levanta el proyecto en http://localhost:3000
 ```
 
-Abran `.env.local` y reemplacen `NEXT_PUBLIC_GATEWAY_URL` por la URL real del API Gateway
-cuando esté disponible (mientras tanto, `http://localhost:8080` sirve como valor de prueba).
+Abran `.env.local` y configuren `NEXT_PUBLIC_GATEWAY_URL` con la URL real del API Gateway.
+Para desarrollo local, Auth usa por defecto `http://localhost:10000`, donde escucha el backend
+de autenticación. Si necesitan cambiarlo, definan `NEXT_PUBLIC_AUTH_API_URL`. En producción,
+Auth usa `NEXT_PUBLIC_GATEWAY_URL` salvo que se configure explícitamente `NEXT_PUBLIC_AUTH_API_URL`.
 
 Este modo (`npm run dev`) es el que van a usar el 95% del tiempo mientras programan: tiene
 recarga automática al guardar cambios. La sección 8 explica cómo compilar y correr la

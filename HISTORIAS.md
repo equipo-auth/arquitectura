@@ -87,9 +87,9 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 
 **Criterios de Aceptación:**
 * **Escenario: Carga exclusiva del formulario:** dado que un usuario navega a /admin/login cuando la ruta carga entonces solo se despliega el formulario de acceso administrativo
-* **Escenario: Intento con rol incorrecto:** dado un intento de login en /admin/login con una cuenta rol "comprador" cuando se valida en el backend entonces responde 403 Forbidden y se rechaza el acceso en la vista
-* **Escenario: Redirección posterior al login:** dado un login exitoso cuando el backend responde con la cookie de sesión entonces se redirige al módulo de gestión o check-in correspondiente
-* **Escenario: Intercepción por Primer Inicio (Nuevo):** dado un login de Staff/Organizador con credenciales válidas cuando el backend informa que la cuenta requiere cambio de clave (`primer_inicio=true`) entonces el frontend retiene la redirección al panel y despliega obligatoriamente la vista de "Actualizar Contraseña".
+* **Escenario: Intento con rol incorrecto:** dado un intento de login en /admin/login (el frontend envía `admin: true` a `POST /api/auth/login`) con una cuenta rol "comprador" y credenciales válidas cuando se valida en el backend entonces responde 403 Forbidden y se rechaza el acceso en la vista. Si las credenciales son incorrectas responde 401, sin revelar el rol.
+* **Escenario: Redirección posterior al login:** dado un login exitoso cuando el backend responde con la cookie de sesión entonces se redirige al módulo correspondiente: ORGANIZADOR → `/organizador`, STAFF → `/checkin`, ADMIN → `/admin/provision`
+* **Escenario: Intercepción por Primer Inicio (Nuevo):** dado un login de Staff/Organizador con credenciales válidas cuando el backend informa que la cuenta requiere cambio de clave (`primer_inicio=true`) (HTTP 403 con `primer_inicio: true` y `url: /crear-clave?token=...`) entonces el frontend retiene la redirección al panel y despliega obligatoriamente la vista de "Crear contraseña" (`/crear-clave`).
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
@@ -112,7 +112,7 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 **Criterios de Aceptación:**
 * **Escenario: Solicitud genérica:** dado cualquier email ingresado cuando se envía la solicitud entonces se muestra siempre el mismo mensaje genérico de confirmación
 * **Escenario: Validación local:** dado un enlace de restablecimiento válido cuando el usuario define su nueva clave entonces se valida en el frontend con la misma política de contraseñas del registro
-* **Escenario: Enlace expirado:** dado un enlace expirado o ya usado cuando se accede a la ruta entonces se muestra un error genérico sin indicar el motivo
+* **Escenario: Enlace expirado:** dado un enlace expirado o ya usado cuando se accede a la ruta (`/restablecer` o `/crear-clave`) entonces el frontend lo valida con `POST /api/auth/validar-token` y muestra un error genérico sin indicar el motivo
 * **Escenario: Confirmación de seguridad:** dado un cambio de clave exitoso cuando se confirma la acción entonces se informa al usuario que todas sus sesiones activas fueron cerradas por seguridad
 
 **Definición de Terminado (equipo):**
@@ -201,15 +201,18 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ---
 
 ### HU-B4: API de Provisión de Cuentas (Organizador / Staff)
-* **Historia:** Como Administrador de Plataforma, quiero crear manualmente cuentas para el Staff y Organizadores, para proveerles acceso oficial al sistema sin que pasen por el registro público.
+* **Historia:** Como Administrador de Plataforma (rol `ADMIN`), quiero crear cuentas para el Staff y Organizadores, para proveerles acceso oficial al sistema sin que pasen por el registro público.
 * **Microservicio dueño:** Auth (Backend)
 * **Depende de:** Notificaciones (vía RabbitMQ) e Infraestructura (Keycloak)
+* **Decisión del equipo:** el usuario se crea **manualmente** en la consola de Keycloak (rol `ORGANIZADOR` o `STAFF`, sin contraseña y con la acción requerida `UPDATE_PASSWORD`). Auth no llama a la API de administración de Keycloak para crearlo.
 
 **Criterios de Aceptación:**
-* **Escenario: Creación administrativa en Keycloak:** dado un Administrador de Plataforma cuando registra a un nuevo miembro entonces Auth utiliza la API interna de Keycloak para crear el usuario y asignarle el rol correspondiente (Organizador o Staff), abstrayendo esta complejidad del Frontend.
-* **Escenario: Bloqueo de permisos:** dado un usuario sin privilegios de administrador cuando intenta acceder a este endpoint de provisión entonces el sistema responde 403 Forbidden.
-* **Escenario: Contraseña temporal y Acción Requerida:** dado que la cuenta se aprovisiona en Keycloak cuando se genera entonces Auth le asigna una clave temporal configurada como no permanente y activa la acción requerida de cambio de clave (`UPDATE_PASSWORD`), asegurando que Keycloak rechace el acceso final hasta que se actualice.
-* **Escenario: Delegación de Notificaciones:** dado una cuenta creada exitosamente cuando Keycloak confirma la creación entonces Auth prohíbe el envío de correos nativos y publica el evento en el exchange `auth_events` de RabbitMQ con el JSON (`email`, `nombre`, `password_temporal`) para que el equipo de Notificaciones se encargue.
+* **Escenario: Registro en Auth con jerarquía:** dado un usuario `ADMIN` autenticado cuando envía `POST /api/auth/provision` con `rut`, `email`, `nombre` y `rol` (`ORGANIZADOR` o `STAFF`) entonces Auth crea el usuario sin contraseña, con `cambio_obligatorio = true` y `creado_por_id` = UUID del administrador, junto a su token de creación de clave, dentro de una única transacción (`$transaction`). Responde 201.
+* **Escenario: Bloqueo de permisos:** dado un usuario sin rol `ADMIN` cuando intenta acceder a este endpoint de provisión entonces el sistema responde 403 Forbidden (401 si no hay sesión).
+* **Escenario: Duplicidad:** dado un RUT o email ya registrado cuando se intenta provisionar entonces responde 409 y no se publica ningún evento.
+* **Escenario: Enlace de creación de clave:** dado una cuenta creada cuando se genera el token entonces es de un solo uso, se guarda hasheado (SHA-256) y vence en 72 horas. El enlace es `{FRONTEND_URL}/crear-clave?token=...`.
+* **Escenario: Delegación de Notificaciones:** dado una cuenta creada exitosamente cuando la transacción hace commit entonces Auth publica el evento `cuenta_staff` (JSON plano) en el exchange `auth.events` de RabbitMQ con `email_destino` y `url`, según el Contrato Auth ↔ Notificaciones v1.0. Nunca se envía una contraseña por el broker.
+* **Escenario: Confirmación de envío:** dado que Notificaciones publica la respuesta `correo_auth` en el exchange `notificaciones.events` cuando Auth la recibe entonces registra en logs si el correo fue entregado (`[CORREO_AUTH][ENTREGADO]`) o rebotó (`[CORREO_AUTH][REBOTADO]`, con `error_envio`).
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado
@@ -232,7 +235,7 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 **Criterios de Aceptación:**
 * **Escenario: Solicitud ofuscada:** dado cualquier email recibido cuando se procesa la solicitud entonces siempre responde 200 OK, exista o no la cuenta
 * **Escenario: Vigencia del token:** dado un token generado cuando se persiste entonces expira en 15 minutos, es de un solo uso y responde 401/410 si se reutiliza
-* **Escenario: Publicación asíncrona de evento:** dado un token de recuperación generado exitosamente cuando se debe notificar al usuario entonces Auth publica el evento `auth.clave.recuperar` en el canal `auth_events` de RabbitMQ, enviando únicamente el `email` y la `url_recuperacion` (Fire-and-Forget).
+* **Escenario: Publicación asíncrona de evento:** dado un token de recuperación generado exitosamente cuando se debe notificar al usuario entonces Auth publica el evento `recuperacion_cuenta` (JSON plano) en el exchange `auth.events` de RabbitMQ, enviando únicamente `Id_usuario`, `email_destino` y `url`, según el Contrato Auth ↔ Notificaciones v1.0 (Fire-and-Forget). La confirmación de envío llega por `correo_auth` en `notificaciones.events`.
 * **Escenario: Invalidación de sesiones:** dado un cambio de clave exitoso cuando se confirma en base de datos entonces token_version se incrementa en +1, invalidando intencionalmente todas las sesiones activas previas
 
 **Definición de Terminado (equipo):**

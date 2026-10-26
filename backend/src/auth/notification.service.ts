@@ -1,54 +1,73 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import * as amqp from 'amqplib';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { lastValueFrom, timeout } from 'rxjs';
+import {
+  AUTH_EVENTS,
+  RABBITMQ_NOTIFICATIONS,
+  rabbitConfig,
+} from './messaging/rabbitmq.config';
+import {
+  CuentaStaffEvent,
+  RecuperacionCuentaEvent,
+} from './messaging/auth-events.interface';
+
+const PUBLISH_TIMEOUT_MS = 5000; // SLA contrato v1.0 (≤ 5 s)
 
 @Injectable()
-export class NotificationService implements OnModuleInit {
+export class NotificationService implements OnApplicationShutdown {
   private readonly logger = new Logger(NotificationService.name);
-  private connection: any = null;
-  private channel: any = null;
-  private readonly queueName = 'notificaciones_recuperacion';
 
+  constructor(
+    @Inject(RABBITMQ_NOTIFICATIONS) private readonly rabbitClient: ClientProxy,
+  ) {}
 
-  async onModuleInit() {
-    const rabbitUrl = process.env.RABBITMQ_URL;
-    if (rabbitUrl) {
-      try {
-        this.connection = await amqp.connect(rabbitUrl);
-        this.channel = await this.connection.createChannel();
-        await this.channel.assertQueue(this.queueName, { durable: true });
-        this.logger.log('Conectado exitosamente a RabbitMQ para notificaciones.');
-      } catch (error) {
-        this.logger.warn(`No se pudo conectar a RabbitMQ: ${error.message}. Se usará fallback por logger.`);
-      }
-    } else {
-      this.logger.log('RABBITMQ_URL no configurado. Las notificaciones se registrarán en los logs.');
+  /** HU-B5 — firma original conservada */
+  async sendRecoveryEmail(payload: RecuperacionCuentaEvent): Promise<boolean> {
+    return this.publish(AUTH_EVENTS.RECUPERACION_CUENTA, {
+      Id_usuario: payload.Id_usuario,
+      email_destino: payload.email_destino,
+      url: payload.url,
+    });
+  }
+
+  /** HU-B4 */
+  async sendStaffAccountEmail(payload: CuentaStaffEvent): Promise<boolean> {
+    return this.publish(AUTH_EVENTS.CUENTA_STAFF, {
+      email_destino: payload.email_destino,
+      url: payload.url,
+    });
+  }
+
+  private async publish(
+    routingKey: string,
+    payload: CuentaStaffEvent | RecuperacionCuentaEvent,
+  ): Promise<boolean> {
+    const exchange = rabbitConfig().authExchange;
+    try {
+      await lastValueFrom(
+        this.rabbitClient
+          .emit(routingKey, payload)
+          .pipe(timeout(PUBLISH_TIMEOUT_MS)),
+        { defaultValue: undefined },
+      );
+      this.logger.log(
+        `[PUBLICADO] exchange=${exchange} routing_key=${routingKey} email_destino=${payload.email_destino}`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `[FALLO_PUBLICACION] exchange=${exchange} routing_key=${routingKey} email_destino=${payload.email_destino} error=${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
     }
   }
 
-  async sendPasswordRecoveryEvent(email: string, resetUrl: string, token: string) {
-    const eventPayload = {
-      tipo: 'enviar_correo_recuperacion',
-      email,
-      resetUrl,
-      token,
-      timestamp: new Date().toISOString(),
-    };
-
-    if (this.channel) {
-      try {
-        this.channel.sendToQueue(
-          this.queueName,
-          Buffer.from(JSON.stringify(eventPayload)),
-          { persistent: true },
-        );
-        this.logger.log(`Evento de recuperación enviado a la cola para ${email}`);
-        return;
-      } catch (err) {
-        this.logger.error(`Error publicando evento en RabbitMQ: ${err.message}`);
-      }
-    }
-
-    // Fallback: Registrar en logger
-    this.logger.log(`[NOTIFICACIÓN] Para: ${email} | URL Recuperación: ${resetUrl}`);
+  async onApplicationShutdown() {
+    await this.rabbitClient.close();
   }
 }

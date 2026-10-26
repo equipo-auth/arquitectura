@@ -33,3 +33,31 @@ export function formatRut(value: string) {
 export function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
+
+/** Misma política que el registro (HU-F1) y el backend: mínimo 8 caracteres. */
+export const PASSWORD_MIN_LENGTH = 8;
+
+export function validateNewPassword(password: string, confirmation: string) {
+  const errors: Record<string, string> = {};
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    errors.password = `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (password !== confirmation) {
+    errors.confirmation = "Las contraseñas no coinciden.";
+  }
+  return errors;
+}
+
+/** Destino posterior al login administrativo (HU-F3). */
+export function homeForRole(rol: string) {
+  switch (rol.toUpperCase()) {
+    case "ADMIN":
+      return "/admin/provision";
+    case "ORGANIZADOR":
+      return "/organizador";
+    case "STAFF":
+      return "/checkin";
+    default:
+      return null;
+  }
+}

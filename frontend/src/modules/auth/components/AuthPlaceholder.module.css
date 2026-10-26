@@ -222,3 +222,28 @@
     min-height: 44px;
   }
 }
+
+/* Sprint 2 */
+.link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.linkRow {
+  margin: 0;
+  text-align: right;
+  font-size: 13px;
+}
+
+.select {
+  appearance: auto;
+}
+
+.details {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}

@@ -13,3 +13,7 @@
 
 export const GATEWAY_URL =
   process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8080";
+
+export const AUTH_API_URL =
+  process.env.NEXT_PUBLIC_AUTH_API_URL ??
+  (process.env.NODE_ENV === "development" ? "http://localhost:10000" : GATEWAY_URL);

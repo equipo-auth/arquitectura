@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { MicroserviceOptions } from '@nestjs/microservices';
+import { buildNotificacionesServerOptions } from './auth/messaging/rabbitmq.config';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
@@ -32,8 +35,22 @@ async function bootstrap() {
     allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key',
   });
 
+  // Configuracion del swagger
+  const config = new DocumentBuilder()
+    .setTitle('Microservicio Auth')
+    .setDescription('Documentación de la API de Autenticación para TITEC')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
+  // Listener híbrido: notificaciones.events -> correo_auth
+  app.connectMicroservice<MicroserviceOptions>(buildNotificacionesServerOptions());
+  await app.startAllMicroservices();
+
   const port = process.env.PORT || 10000;
   await app.listen(port);
   console.log(`Backend de Autenticación corriendo en el puerto ${port}`);
+  console.log(`Documentación Swagger disponible en http://localhost:${port}/api/docs`);
 }
 bootstrap();

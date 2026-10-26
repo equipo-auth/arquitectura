@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { AuthApiError, loginBuyer, registerBuyer } from "@/modules/auth/api";
 import { formatRut, isValidEmail, isValidRut } from "@/modules/auth/validators";
 import styles from "./AuthPlaceholder.module.css";
@@ -195,6 +196,12 @@ export default function AuthPlaceholder() {
                 </span>
               )}
             </div>
+
+            <p className={styles.linkRow}>
+              <Link className={styles.link} href="/recuperar">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </p>
 
             <button
               className={styles.submit}
