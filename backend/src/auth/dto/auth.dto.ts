@@ -61,7 +61,6 @@ export class ResetPasswordDto {
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   nueva_clave: string;
 }
-
 export class ValidateTokenDto {
   @IsString()
   @IsNotEmpty()
