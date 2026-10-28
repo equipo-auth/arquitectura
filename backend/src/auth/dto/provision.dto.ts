@@ -1,6 +1,5 @@
-// src/auth/dto/provision.dto.ts
-import { IsEmail, IsNotEmpty, IsString, IsIn, Matches, IsOptional, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsString, IsIn, Matches } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class ProvisionDto {
   @ApiProperty({ example: '12.345.678-5' })
@@ -25,11 +24,4 @@ export class ProvisionDto {
   @IsNotEmpty({ message: 'El rol es obligatorio' })
   @IsIn(['ORGANIZADOR', 'STAFF'], { message: 'El rol asignable debe ser ORGANIZADOR o STAFF' })
   rol: 'ORGANIZADOR' | 'STAFF';
-
-  @ApiPropertyOptional({
-    description: 'UUID del usuario (ORGANIZADOR/STAFF) que solicita la creación. Opcional.',
-  })
-  @IsOptional()
-  @IsUUID('all', { message: 'creado_por_id debe ser un UUID válido' })
-  creado_por_id?: string;
 }

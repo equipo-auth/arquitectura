@@ -50,8 +50,9 @@ export function validateNewPassword(password: string, confirmation: string) {
 
 /** Destino posterior al login administrativo (HU-F3). */
 export function homeForRole(rol: string) {
-  // Acepta el rol del contrato ("organizador", "staff") o el interno.
   switch (rol.toUpperCase()) {
+    case "ADMIN":
+      return "/admin/provision";
     case "ORGANIZADOR":
       return "/organizador";
     case "STAFF":

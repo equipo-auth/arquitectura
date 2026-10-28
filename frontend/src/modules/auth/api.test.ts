@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AuthApiError,
   loginAdmin,
+  provisionAccount,
+  registerBuyer,
   requestPasswordRecovery,
   resetPassword,
   setInitialPassword,
@@ -30,6 +32,36 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("HU-F1: registerBuyer", () => {
+  const payload = {
+    rut: "12.345.678-5",
+    email: "n@t.cl",
+    password: "password123",
+    nombre: "N",
+  };
+
+  it("envía el registro al endpoint correcto con credentials include", async () => {
+    respond(201, { message: "ok", user: { email: payload.email } });
+    await expect(registerBuyer(payload)).resolves.toMatchObject({
+      message: "ok",
+      user: { email: payload.email },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/auth\/register$/);
+    expect((init as RequestInit).credentials).toBe("include");
+    expect(lastBody()).toEqual(payload);
+  });
+
+  it("muestra la validación del backend si la contraseña es demasiado corta", async () => {
+    respond(400, { message: ["La contraseña debe tener al menos 8 caracteres"] });
+    await expect(registerBuyer({ ...payload, password: "123456" })).rejects.toMatchObject({
+      status: 400,
+      message: "La contraseña debe tener al menos 8 caracteres",
+    });
+  });
+});
 
 describe("HU-F3: loginAdmin", () => {
   it("envía admin=true y credentials include", async () => {
@@ -102,5 +134,19 @@ describe("HU-F4: recuperación", () => {
     await setInitialPassword("t", "password123");
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/update-password$/);
     expect(lastBody()).toEqual({ token: "t", newPassword: "password123" });
+  });
+});
+
+describe("HU-B4: provisionAccount", () => {
+  const payload = { rut: "12.345.678-5", email: "n@t.cl", nombre: "N", rol: "STAFF" as const };
+
+  it("mapea 403 y 409 a mensajes claros", async () => {
+    respond(403);
+    await expect(provisionAccount(payload)).rejects.toMatchObject({ status: 403 });
+    respond(409);
+    await expect(provisionAccount(payload)).rejects.toMatchObject({
+      status: 409,
+      message: "Los datos ingresados ya se encuentran registrados.",
+    });
   });
 });

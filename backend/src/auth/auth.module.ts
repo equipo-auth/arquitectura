@@ -11,8 +11,7 @@ import { NotificationService } from './notification.service';
 import { JwtStrategy } from './jwt.strategy';
 import { KeycloakModule } from '../keycloak/keycloak.module';
 import { NotificacionesListener } from './notificaciones.listener';
-import { InternalController } from '../internal/internal.controller';
-import { InternalApiKeyGuard } from '../common/internal-api-key.guard';
+import { RolesGuard } from './roles.guard';
 import { RABBITMQ_NOTIFICATIONS, buildAuthEventsClientOptions } from './messaging/rabbitmq.config';
 
 @Module({
@@ -44,8 +43,8 @@ import { RABBITMQ_NOTIFICATIONS, buildAuthEventsClientOptions } from './messagin
       },
     ]),
   ],
-  controllers: [AuthController, InternalController, NotificacionesListener],
-  providers: [AuthService, RsaKeyService, NotificationService, JwtStrategy, InternalApiKeyGuard],
+  controllers: [AuthController, NotificacionesListener],
+  providers: [AuthService, RsaKeyService, NotificationService, JwtStrategy, RolesGuard],
   exports: [AuthService, RsaKeyService],
 })
 export class AuthModule {}

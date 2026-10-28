@@ -23,7 +23,7 @@
     "postinstall": "prisma skills sync || exit 0"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@keycloak/keycloak-admin-client": "^26.7.4",

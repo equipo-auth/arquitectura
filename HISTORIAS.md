@@ -88,7 +88,7 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 **Criterios de Aceptación:**
 * **Escenario: Carga exclusiva del formulario:** dado que un usuario navega a /admin/login cuando la ruta carga entonces solo se despliega el formulario de acceso administrativo
 * **Escenario: Intento con rol incorrecto:** dado un intento de login en /admin/login (el frontend envía `admin: true` a `POST /api/auth/login`) con una cuenta rol "comprador" y credenciales válidas cuando se valida en el backend entonces responde 403 Forbidden y se rechaza el acceso en la vista. Si las credenciales son incorrectas responde 401, sin revelar el rol.
-* **Escenario: Redirección posterior al login:** dado un login exitoso cuando el backend responde con la cookie de sesión entonces se redirige al módulo correspondiente: ORGANIZADOR → `/organizador`, STAFF → `/checkin`
+* **Escenario: Redirección posterior al login:** dado un login exitoso cuando el backend responde con la cookie de sesión entonces se redirige al módulo correspondiente: ORGANIZADOR → `/organizador`, STAFF → `/checkin`, ADMIN → `/admin/provision`
 * **Escenario: Intercepción por Primer Inicio (Nuevo):** dado un login de Staff/Organizador con credenciales válidas cuando el backend informa que la cuenta requiere cambio de clave (`primer_inicio=true`) (HTTP 403 con `primer_inicio: true` y `url: /crear-clave?token=...`) entonces el frontend retiene la redirección al panel y despliega obligatoriamente la vista de "Crear contraseña" (`/crear-clave`).
 
 **Definición de Terminado (equipo):**
@@ -201,20 +201,18 @@ Para garantizar la integridad de las credenciales, la trazabilidad de los acceso
 ---
 
 ### HU-B4: API de Provisión de Cuentas (Organizador / Staff)
-* **Historia:** Como servicio interno autorizado de la plataforma, quiero crear cuentas para el Staff y Organizadores, para proveerles acceso oficial al sistema sin que pasen por el registro público.
+* **Historia:** Como Administrador de Plataforma (rol `ADMIN`), quiero crear cuentas para el Staff y Organizadores, para proveerles acceso oficial al sistema sin que pasen por el registro público.
 * **Microservicio dueño:** Auth (Backend)
 * **Depende de:** Notificaciones (vía RabbitMQ) e Infraestructura (Keycloak)
-* **Roles válidos en Auth:** `COMPRADOR`, `ORGANIZADOR`, `STAFF`. No existe rol `ADMIN`: la administración superior se hace manualmente en la consola de Keycloak.
+* **Decisión del equipo:** el usuario se crea **manualmente** en la consola de Keycloak (rol `ORGANIZADOR` o `STAFF`, sin contraseña y con la acción requerida `UPDATE_PASSWORD`). Auth no llama a la API de administración de Keycloak para crearlo.
 
 **Criterios de Aceptación:**
-* **Escenario: Acceso interno:** dado una llamada a `POST /api/auth/provision` cuando no incluye la cabecera `x-api-key` válida (`INTERNAL_API_KEY`) entonces responde 403 Forbidden.
-* **Escenario: Orden BD → Keycloak → RabbitMQ:** dado un payload válido (`rut`, `email`, `nombre`, `rol` ORGANIZADOR|STAFF, `creado_por_id` opcional) cuando se procesa entonces Auth 1) guarda el usuario (email en minúsculas, sin contraseña, `cambio_obligatorio = true`) y su token de creación de clave dentro de una transacción; 2) crea el usuario en Keycloak con el realm role correspondiente y la acción requerida `UPDATE_PASSWORD`; 3) solo si ambos pasos fueron exitosos, publica el evento.
-* **Escenario: Rollback:** dado que Keycloak falla cuando se intenta crear el usuario entonces la transacción de BD se revierte, no queda el usuario en Auth y no se publica ningún evento. Si el COMMIT falla tras crear en Keycloak, Auth elimina el usuario de Keycloak (compensación).
-* **Escenario: Jerarquía:** dado un `creado_por_id` cuando no corresponde a un usuario ORGANIZADOR o STAFF existente entonces responde 403.
-* **Escenario: Duplicidad:** dado un RUT o email ya registrado (en BD o en Keycloak) cuando se intenta provisionar entonces responde 409 y no se publica ningún evento.
+* **Escenario: Registro en Auth con jerarquía:** dado un usuario `ADMIN` autenticado cuando envía `POST /api/auth/provision` con `rut`, `email`, `nombre` y `rol` (`ORGANIZADOR` o `STAFF`) entonces Auth crea el usuario sin contraseña, con `cambio_obligatorio = true` y `creado_por_id` = UUID del administrador, junto a su token de creación de clave, dentro de una única transacción (`$transaction`). Responde 201.
+* **Escenario: Bloqueo de permisos:** dado un usuario sin rol `ADMIN` cuando intenta acceder a este endpoint de provisión entonces el sistema responde 403 Forbidden (401 si no hay sesión).
+* **Escenario: Duplicidad:** dado un RUT o email ya registrado cuando se intenta provisionar entonces responde 409 y no se publica ningún evento.
 * **Escenario: Enlace de creación de clave:** dado una cuenta creada cuando se genera el token entonces es de un solo uso, se guarda hasheado (SHA-256) y vence en 72 horas. El enlace es `{FRONTEND_URL}/crear-clave?token=...`.
-* **Escenario: Delegación de Notificaciones:** dado una cuenta creada exitosamente cuando se completa la transacción entonces Auth publica el evento `cuenta_staff` (JSON plano) en el exchange `auth.events` con `email_destino` y `url`, según el Contrato Auth ↔ Notificaciones v1.0.
-* **Escenario: Confirmación de envío:** dado que Notificaciones publica `correo_auth` en `notificaciones.events` cuando Auth la recibe entonces registra en logs `[CORREO_AUTH][ENTREGADO]` o `[CORREO_AUTH][REBOTADO]` (con `error_envio`).
+* **Escenario: Delegación de Notificaciones:** dado una cuenta creada exitosamente cuando la transacción hace commit entonces Auth publica el evento `cuenta_staff` (JSON plano) en el exchange `auth.events` de RabbitMQ con `email_destino` y `url`, según el Contrato Auth ↔ Notificaciones v1.0. Nunca se envía una contraseña por el broker.
+* **Escenario: Confirmación de envío:** dado que Notificaciones publica la respuesta `correo_auth` en el exchange `notificaciones.events` cuando Auth la recibe entonces registra en logs si el correo fue entregado (`[CORREO_AUTH][ENTREGADO]`) o rebotó (`[CORREO_AUTH][REBOTADO]`, con `error_envio`).
 
 **Definición de Terminado (equipo):**
 - [ ] PR revisado

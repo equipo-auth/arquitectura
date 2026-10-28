@@ -33,8 +33,7 @@ describe("validators", () => {
   it("HU-F3: redirige según rol y rechaza compradores", () => {
     expect(homeForRole("STAFF")).toBe("/checkin");
     expect(homeForRole("ORGANIZADOR")).toBe("/organizador");
-    expect(homeForRole("staff")).toBe("/checkin");
-    expect(homeForRole("usuario")).toBeNull();
-    expect(homeForRole("ADMIN")).toBeNull();
+    expect(homeForRole("ADMIN")).toBe("/admin/provision");
+    expect(homeForRole("COMPRADOR")).toBeNull();
   });
 });

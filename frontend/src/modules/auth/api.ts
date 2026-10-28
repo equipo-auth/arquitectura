@@ -1,12 +1,13 @@
 // ============================================================================
 // modules/auth/api.ts
 // ----------------------------------------------------------------------------
-// HU-F1 / HU-F2. Todas las llamadas salen por el API Gateway.
+// HU-F1 / HU-F2. En desarrollo local Auth puede apuntar directamente al backend;
+// en otros entornos usa el API Gateway salvo que se configure otra URL.
 // La sesión viaja como cookie HttpOnly administrada por el navegador; el
 // frontend nunca intenta leer, guardar ni decodificar el JWT.
 // ============================================================================
 
-import { GATEWAY_URL } from "@/lib/env";
+import { AUTH_API_URL } from "@/lib/env";
 
 const BASE_PATH = "/api/auth";
 
@@ -43,13 +44,13 @@ export class AuthApiError extends Error {
 function assertSecureGateway() {
   // En producción las credenciales solo deben viajar por HTTPS.
   // Se permite HTTP exclusivamente para localhost durante desarrollo local.
-  const url = new URL(GATEWAY_URL);
+  const url = new URL(AUTH_API_URL);
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
 
   if (url.protocol !== "https:" && !isLocal) {
     throw new AuthApiError(
       0,
-      "Configuración insegura: el Gateway debe utilizar HTTPS.",
+      "Configuración insegura: Auth debe utilizar HTTPS.",
     );
   }
 }
@@ -67,7 +68,7 @@ async function readErrorMessage(response: Response, fallback: string) {
 export async function registerBuyer(payload: RegisterPayload) {
   assertSecureGateway();
 
-  const response = await fetch(`${GATEWAY_URL}${BASE_PATH}/register`, {
+  const response = await fetch(`${AUTH_API_URL}${BASE_PATH}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -99,7 +100,7 @@ export async function registerBuyer(payload: RegisterPayload) {
 export async function loginBuyer(payload: LoginPayload) {
   assertSecureGateway();
 
-  const response = await fetch(`${GATEWAY_URL}${BASE_PATH}/login`, {
+  const response = await fetch(`${AUTH_API_URL}${BASE_PATH}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -154,11 +155,35 @@ export type AdminLoginResult =
   | { kind: "ok" }
   | { kind: "password_change"; url: string };
 
+export type ProvisionPayload = {
+  rut: string;
+  email: string;
+  nombre: string;
+  rol: "ORGANIZADOR" | "STAFF";
+};
+
+export type ProvisionResult = {
+  message: string;
+  user: {
+    uuid: string;
+    email: string;
+    nombre: string;
+    rut: string;
+    rol: string;
+    creado_por_id: string | null;
+  };
+  notificacion: {
+    evento: string;
+    publicada: boolean;
+    enlace_expira_en: string;
+  };
+};
+
 const GENERIC_LINK_ERROR = "El enlace no es válido. Solicita uno nuevo.";
 
 function postJson(path: string, body?: unknown) {
   assertSecureGateway();
-  return fetch(`${GATEWAY_URL}${BASE_PATH}${path}`, {
+  return fetch(`${AUTH_API_URL}${BASE_PATH}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -168,7 +193,7 @@ function postJson(path: string, body?: unknown) {
 
 /** HU-F3: mismo endpoint de login, distinto manejo de la respuesta. */
 export async function loginAdmin(payload: LoginPayload): Promise<AdminLoginResult> {
-  // admin: true → el backend responde 403 si la cuenta no es ORGANIZADOR/STAFF.
+  // admin: true → el backend responde 403 si la cuenta no es ADMIN/ORGANIZADOR/STAFF.
   const response = await postJson("/login", { ...payload, admin: true });
 
   if (response.status === 403) {
@@ -208,7 +233,7 @@ export async function loginAdmin(payload: LoginPayload): Promise<AdminLoginResul
 /** HU-B6: la cookie HttpOnly viaja sola; el front solo lee el perfil normalizado. */
 export async function getSession(): Promise<SessionProfile | null> {
   assertSecureGateway();
-  const response = await fetch(`${GATEWAY_URL}${BASE_PATH}/validar-sesion`, {
+  const response = await fetch(`${AUTH_API_URL}${BASE_PATH}/validar-sesion`, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -268,4 +293,28 @@ export async function setInitialPassword(token: string, newPassword: string) {
   if (!response.ok) {
     throw new AuthApiError(response.status, GENERIC_LINK_ERROR);
   }
+}
+
+/** HU-B4: solo ADMIN. */
+export async function provisionAccount(
+  payload: ProvisionPayload,
+): Promise<ProvisionResult> {
+  const response = await postJson("/provision", payload);
+
+  if (response.ok) return response.json() as Promise<ProvisionResult>;
+
+  if (response.status === 401) {
+    throw new AuthApiError(401, "Tu sesión expiró. Inicia sesión nuevamente.");
+  }
+  if (response.status === 403) {
+    throw new AuthApiError(403, "No tienes permisos para crear cuentas.");
+  }
+  if (response.status === 409) {
+    throw new AuthApiError(409, "Los datos ingresados ya se encuentran registrados.");
+  }
+  const message = await readErrorMessage(
+    response,
+    "No fue posible crear la cuenta. Intenta nuevamente.",
+  );
+  throw new AuthApiError(response.status, message);
 }

@@ -1,39 +1,22 @@
-// src/auth/auth.controller.ts
-import {
-  Controller,
-  Post,
-  Body,
-  Res,
-  HttpCode,
-  HttpStatus,
-  Get,
-  UseGuards,
-  Req,
-  Header,
-} from '@nestjs/common';
-import { CookieOptions, Response } from 'express';
-import { SkipThrottle } from '@nestjs/throttler';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiHeader } from '@nestjs/swagger';
+import { Controller, Post, Body, Res, HttpCode, HttpStatus, UnauthorizedException, Get, UseGuards, Req, Header } from '@nestjs/common';
+import { Response, Request } from 'express';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import {
-  RegisterDto,
-  LoginDto,
-  UpdatePasswordDto,
-  RecoverDto,
-  ResetPasswordDto,
-  ValidateTokenDto,
-} from './dto/auth.dto';
+import { RegisterDto, LoginDto, UpdatePasswordDto, RecoverDto, ResetPasswordDto, ValidateTokenDto } from './dto/auth.dto';
 import { ProvisionDto } from './dto/provision.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { SESSION_COOKIE, SessionUser } from './jwt.strategy';
-import { InternalApiKeyGuard } from '../common/internal-api-key.guard';
+import { RolesGuard } from './roles.guard';
+import { Roles } from './roles.decorator';
+import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth } from '@nestjs/swagger';
 
-const sessionCookieOptions = (): CookieOptions => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  path: '/',
-});
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  handleRequest(err: any, user: any, info: any) {
+    if (err || !user) {
+      console.warn(`[JwtAuthGuard] Bloqueo de acceso: ${info?.message || err?.message || 'Token inválido'}`);
+      throw err || new UnauthorizedException('Acceso no autorizado');
+    }
+    return user;
+  }
+}
 
 @ApiTags('Autenticación')
 @Controller('api/auth')
@@ -51,7 +34,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'HU-B2: Iniciar sesión y emitir JWT RS256' })
-  @ApiResponse({ status: 200, description: 'Login exitoso. JWT en cookie "jwt" HttpOnly, Secure, SameSite=Strict.' })
+  @ApiResponse({ status: 200, description: 'Login exitoso. Payload con sub, rol y token_version enviado en cookie HttpOnly, Secure, SameSite=Strict.' })
   @ApiResponse({ status: 401, description: 'Prevención de descubrimiento: Email inexistente o contraseña incorrecta.' })
   @ApiResponse({ status: 403, description: 'Intercepción: primer_inicio=true (UPDATE_PASSWORD en Keycloak), o rol sin acceso al portal administrativo cuando admin=true.' })
   @ApiResponse({ status: 429, description: 'Bloqueo por demasiados intentos fallidos.' })
@@ -61,17 +44,19 @@ export class AuthController {
     if (result.requirePasswordChange) {
       const rawToken = await this.authService.generatePasswordResetToken(result.user.uuid);
 
-      res.status(HttpStatus.FORBIDDEN);
-      return {
+      res.status(HttpStatus.FORBIDDEN); 
+      return { 
         message: 'Acción requerida: Primer inicio, debe cambiar su clave.',
         primer_inicio: true,
         action: 'REDIRECT',
-        url: `/crear-clave?token=${rawToken}`,
+        url: `/crear-clave?token=${rawToken}`
       };
-    }
+    } 
 
-    res.cookie(SESSION_COOKIE, result.token, {
-      ...sessionCookieOptions(),
+    res.cookie('jwt_token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', 
+      sameSite: 'strict',
       maxAge: result.expiresInMs,
     });
 
@@ -90,10 +75,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'HU-B5: Solicitar recuperación de contraseña' })
   @ApiResponse({ status: 200, description: 'Respuesta genérica (200 OK) para evitar enumeración de usuarios.' })
-  recoverPassword(@Body() recoverDto: RecoverDto) {
+  async recoverPassword(@Body() recoverDto: RecoverDto) {
     // Falla silenciosa y asíncrona para no exponer tiempos de respuesta ni confirmar el email
     this.authService.processRecovery(recoverDto.email).catch(console.error);
-
+    
     return { message: 'Si el correo existe, se han enviado las instrucciones.' };
   }
 
@@ -111,6 +96,7 @@ export class AuthController {
   @ApiOperation({ summary: 'HU-B5: Restablecer contraseña con token de un solo uso' })
   @ApiResponse({ status: 200, description: 'Contraseña actualizada y sesiones anteriores invalidadas mediante token_version.' })
   @ApiResponse({ status: 401, description: 'Token inválido o ya consumido.' })
+  @ApiResponse({ status: 410, description: 'El token ha expirado.' })
   async resetPassword(@Body() resetDto: ResetPasswordDto) {
     await this.authService.resetPassword(resetDto.token, resetDto.nueva_clave);
     return { message: 'Contraseña actualizada exitosamente.' };
@@ -118,38 +104,41 @@ export class AuthController {
 
   @Post('provision')
   @HttpCode(HttpStatus.CREATED)
-  @SkipThrottle()
-  @UseGuards(InternalApiKeyGuard)
-  @ApiHeader({ name: 'x-api-key', required: true, description: 'Clave de servicio interno (INTERNAL_API_KEY)' })
-  @ApiOperation({ summary: 'HU-B4: Provisión interna de cuentas ORGANIZADOR / STAFF (BD → Keycloak → RabbitMQ)' })
-  @ApiResponse({ status: 201, description: 'Cuenta creada en BD y Keycloak. Evento cuenta_staff publicado en auth.events.' })
-  @ApiResponse({ status: 400, description: 'Payload inválido (RUT, email, nombre, rol o creado_por_id).' })
-  @ApiResponse({ status: 403, description: 'x-api-key ausente o inválida, o creado_por_id sin rol ORGANIZADOR/STAFF.' })
-  @ApiResponse({ status: 409, description: 'RUT o email ya registrados (en BD o en Keycloak).' })
-  @ApiResponse({ status: 500, description: 'Keycloak falló: la BD se revirtió y no se publicó el evento.' })
-  async provision(@Body() dto: ProvisionDto) {
-    return this.authService.provisionStaff(dto);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'HU-B4: Provisión de cuentas ORGANIZADOR / STAFF' })
+  @ApiResponse({ status: 201, description: 'Cuenta creada sin contraseña, vinculada a creado_por_id. Evento cuenta_staff publicado en auth.events.' })
+  @ApiResponse({ status: 400, description: 'Payload inválido (RUT, email, nombre o rol).' })
+  @ApiResponse({ status: 401, description: 'Token faltante, expirado o revocado.' })
+  @ApiResponse({ status: 403, description: 'El usuario autenticado no posee rol ADMIN.' })
+  @ApiResponse({ status: 409, description: 'RUT o email ya registrados.' })
+  async provision(@Body() dto: ProvisionDto, @Req() req) {
+    return this.authService.provisionStaff(dto, req.user.uuid);
   }
 
-  @Get('validar-sesion')
-  @SkipThrottle()
   @UseGuards(JwtAuthGuard)
+  @Get('validar-sesion')
   @Header('Cache-Control', 'no-store')
-  @ApiCookieAuth(SESSION_COOKIE)
-  @ApiOperation({ summary: 'HU-B6: Sesión del Frontend (mismo formato que /internal/validar-sesion)' })
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'HU-B6: Contrato centralizado de sesión' })
   @ApiResponse({ status: 200, description: 'Sesión válida. Retorna objeto normalizado según Contrato de Integración.' })
   @ApiResponse({ status: 401, description: 'Token faltante, expirado o revocado.' })
-  async validarSesion(@Req() req: { user: SessionUser }) {
+  async validarSesion(@Req() req) {
     return this.authService.getPerfilValido(req.user.uuid);
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @SkipThrottle()
   @ApiOperation({ summary: 'HU-B3: Destrucción de cookie de sesión activa' })
-  @ApiResponse({ status: 200, description: 'Instruye al navegador a destruir la cookie HttpOnly "jwt".' })
-  logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
+  @ApiResponse({ status: 200, description: 'Instruye al navegador a destruir la cookie HttpOnly.' })
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('jwt_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+    
     return { status: 'OK', message: 'Sesión cerrada localmente' };
   }
 }

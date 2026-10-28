@@ -1,5 +1,5 @@
 $kind: http-request
-url: http://localhost:10000/api/auth/registro
+url: http://localhost:10000/api/auth/register
 method: POST
 headers:
   Content-Type: application/json
@@ -10,6 +10,6 @@ body:
       "nombre": "Usuario Test",
       "rut": "12.345.678-5",
       "email": "test@test.com",
-      "password": "123456"
+      "password": "12345678"
     }
 order: 1000
