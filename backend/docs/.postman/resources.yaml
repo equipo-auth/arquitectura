@@ -1,0 +1,13 @@
+# Use this workspace to collaborate
+workspace:
+  id: 3745c941-8577-4e6c-80be-38df3151021a
+
+localResources:
+  collections:
+    - ../postman_collection.json
+  specs:
+    - ../swagger.yaml
+
+cloudResources:
+  collections:
+    ../postman/collections/TITEC - Auth Microservice: 6742e31f-8db8-46dc-9853-8000aa875f95
