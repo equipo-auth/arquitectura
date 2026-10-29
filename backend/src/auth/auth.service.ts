@@ -1,4 +1,5 @@
-import { Injectable, ConflictException, ForbiddenException, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, ForbiddenException, UnauthorizedException, BadRequestException, Logger, Optional } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { KeycloakService } from '../keycloak/keycloak.service';
@@ -8,6 +9,8 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { ProvisionDto } from './dto/provision.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
+import { assertValidRut, formatRut, normalizeRut } from '../common/rut';
+import { mapRolContrato } from './rol-contrato';
 
 // HU-F3: roles con acceso al portal administrativo (/admin/login)
 export const ROLES_ADMINISTRATIVOS = ['ADMIN', 'ORGANIZADOR', 'STAFF'];
@@ -20,54 +23,55 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private keycloakService: KeycloakService,
-    private notificationService: NotificationService, // Añadido para RabbitMQ
+    private notificationService: NotificationService,
+    @Optional() private readonly audit?: AuditService,
   ) {}
 
   async register(dto: RegisterDto) {
+    // El rol procede del flujo de registro, NO de cadenas dentro del email.
+    const email = dto.email.trim().toLowerCase();
+    const rut = assertValidRut(dto.rut);
+    if (!dto.nombre.trim()) throw new BadRequestException('Nombre completo requerido');
     const exists = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: dto.email }, { rut: dto.rut }],
-      },
+      where: { OR: [
+        { email: { equals: email, mode: 'insensitive' } },
+        { rut: { in: [rut, normalizeRut(rut)] } },
+      ] },
     });
-
-    if (exists) {
+    if (exists || await this.keycloakService.emailExists(email)) {
       throw new ConflictException('Los datos ingresados ya se encuentran registrados en la plataforma');
     }
 
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
-
-    const newUser = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        rut: dto.rut,
-        nombre: dto.nombre,
-        password_hash: hashedPassword,
-        rol: 'COMPRADOR',
-        token_version: 0,
-      },
-      select: {
-        uuid: true,
-        email: true,
-        nombre: true,
-        rut: true,
-        rol: true,
-      },
-    });
-
-    return { message: 'Usuario registrado exitosamente', user: newUser };
+    const password_hash = await bcrypt.hash(dto.password, 10);
+    try {
+      const newUser = await this.prisma.user.create({
+        data: {
+          email, rut, nombre: dto.nombre.trim(),
+          password_hash, rol: 'COMPRADOR', token_version: 0,
+        },
+        select: { uuid: true, email: true, nombre: true, rut: true, rol: true },
+      });
+      void this.audit?.record({ event: 'BUYER_REGISTERED', outcome: 'SUCCESS', subjectUuid: newUser.uuid });
+      return { message: 'Usuario registrado exitosamente', user: newUser };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Los datos ingresados ya se encuentran registrados en la plataforma');
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto) {
     const genericError = new UnauthorizedException('Credenciales inválidas');
 
-    this.logger.log(`Procesando intento de login para: ${dto.email}`);
+    const email = dto.email.trim().toLowerCase();
+    this.logger.log(`Procesando intento de login para: ${email}`);
 
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { email },
     });
 
-    if (!user) throw genericError;
+    if (!user || user.activo === false) throw genericError;
 
     if (user.rol === 'COMPRADOR') {
       if (!user.password_hash) throw genericError;
@@ -76,17 +80,26 @@ export class AuthService {
       if (!isPasswordValid) throw genericError;
     } else {
       try {
-        await this.keycloakService.validateUserCredentials(dto.email, dto.password);
+        await this.keycloakService.validateUserCredentials(email, dto.password);
       } catch (error) {
-        if (error.message === 'resolve_required_actions') {
-          this.logger.log(`Usuario administrativo requiere cambio de contraseña: ${dto.email}`);
+        if (error instanceof Error && error.message === 'resolve_required_actions') {
+          this.logger.log(`Usuario administrativo requiere activar su cuenta: ${dto.email}`);
           return { requirePasswordChange: true, user };
         }
-        throw genericError; 
+        throw genericError;
+      }
+      // Evitar que una identidad distinta de Keycloak use el espejo PostgreSQL.
+      if (['STAFF', 'ORGANIZADOR'].includes(user.rol)) {
+        const perfil = await this.keycloakService.getUserByEmail(email);
+        if (!perfil.enabled || perfil.id !== user.uuid || perfil.rol !== user.rol) {
+          throw genericError;
+        }
+      }
+      if (user.cambio_obligatorio === true) {
+        return { requirePasswordChange: true, user };
       }
     }
 
-    // HU-F3: credenciales válidas pero rol sin acceso al portal administrativo
     if (dto.admin && !ROLES_ADMINISTRATIVOS.includes(user.rol)) {
       this.logger.warn(`Intento de acceso al portal administrativo con rol ${user.rol}: ${dto.email}`);
       throw new ForbiddenException('Acceso no autorizado');
@@ -104,25 +117,39 @@ export class AuthService {
     const token = this.jwtService.sign(payload, { expiresIn: `${expiresInHours}h` });
 
     this.logger.log(`Login exitoso, generando JWT para: ${dto.email}`);
+    void this.audit?.record({ event: 'LOGIN_SUCCESS', outcome: 'SUCCESS', subjectUuid: user.uuid, detail: `rol=${user.rol}` });
     return {
       token,
       expiresInMs: expiresInHours * 60 * 60 * 1000,
     };
   }
 
-  async generatePasswordResetToken(userUuid: string): Promise<string> {
+  async generatePasswordResetToken(userUuid: string, ttlMinutes = 15): Promise<string> {
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
-    await this.prisma.passwordResetToken.create({
-      data: {
-        user_uuid: userUuid,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-      },
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Invalidar todos los tokens anteriores sin consumir
+      await tx.passwordResetToken.updateMany({
+        where: {
+          user_uuid: userUuid,
+          used_at: null,
+        },
+        data: {
+          used_at: new Date(),
+        },
+      });
+
+      // Crear el nuevo token
+      await tx.passwordResetToken.create({
+        data: {
+          user_uuid: userUuid,
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+        },
+      });
     });
 
     return rawToken;
@@ -144,32 +171,61 @@ export class AuthService {
       throw new UnauthorizedException('El enlace ha expirado o es inválido.');
     }
 
-    await this.keycloakService.updateUserPassword(resetRecord.user.email, newPassword);
+    if (!['STAFF', 'ORGANIZADOR'].includes(resetRecord.user.rol)) {
+      throw new ForbiddenException('Esta contraseña no se gestiona en Keycloak.');
+    }
 
-    await this.prisma.passwordResetToken.update({
-      where: { id: resetRecord.id },
-      data: { used_at: new Date() },
-    });
+    await this.keycloakService.updateUserPassword(resetRecord.user.email, newPassword, resetRecord.user.uuid);
 
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.update({
+        where: { id: resetRecord.id },
+        data: { used_at: new Date() },
+      }),
+
+      this.prisma.user.update({
+        where: { uuid: resetRecord.user_uuid },
+        data: {
+          cambio_obligatorio: false,
+          token_version: { increment: 1 },
+        },
+      }),
+    ]);
+
+    void this.audit?.record({ event: 'STAFF_PASSWORD_ACTIVATED', outcome: 'SUCCESS', subjectUuid: resetRecord.user_uuid });
     return { message: 'Contraseña actualizada correctamente. Ya puede iniciar sesión.' };
   }
 
   // HU-B5: Procesar solicitud de recuperación para enviarla a Notificaciones
   async processRecovery(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return; // Falla silenciosa para evitar enumeración
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) return; // No revelar existencia del email al cliente.
 
-    // Reutilizamos tu método de generación de tokens hasheados en DB
+    if (user.rol !== 'COMPRADOR') {
+      if (!['STAFF', 'ORGANIZADOR'].includes(user.rol)) return;
+      // La cuenta administrativa ya debe existir en Keycloak; jamás crearla aquí.
+      const keycloakUser = await this.keycloakService.getUserByEmail(user.email);
+      if (!keycloakUser.enabled || keycloakUser.id !== user.uuid || keycloakUser.rol !== user.rol) {
+        throw new ForbiddenException('La identidad administrativa no coincide con Keycloak');
+      }
+    }
+
     const rawToken = await this.generatePasswordResetToken(user.uuid);
-    const recoveryUrl = `https://ticketu.cl/restablecer?token=${rawToken}`;
+    const frontendUrl = (
+      user.rol === 'COMPRADOR'
+        ? process.env.COMPRADOR_FRONTEND_URL || 'http://localhost:3000'
+        : process.env.FRONTEND_URL || 'http://localhost:5173'
+    ).replace(/\/+$/, '');
+    const recoveryUrl = user.rol === 'COMPRADOR'
+      ? `${frontendUrl}/restablecer?token=${rawToken}`
+      : `${frontendUrl}/crear-clave?token=${rawToken}`;
 
-    this.notificationService.sendRecoveryEmail({
-      Id_usuario: user.uuid,
-      email_destino: user.email,
-      url: recoveryUrl,
+    const publicada = await this.notificationService.sendRecoveryEmail({
+      Id_usuario: user.uuid, email_destino: user.email, url: recoveryUrl,
     });
-
-    this.logger.log(`Evento de recuperación enviado a RabbitMQ para: ${email}`);
+    this.logger.log(`[HU-B5] Evento de recuperación uuid=${user.uuid} publicado=${publicada}`);
+    void this.audit?.record({ event: 'PASSWORD_RECOVERY_PUBLISHED', outcome: publicada ? 'SUCCESS' : 'ERROR', subjectUuid: user.uuid, detail: `rol=${user.rol}; rabbitmq=${publicada ? 'PUBLISHED' : 'FAILED'}` });
   }
 
   // HU-B5: Validar token y cambiar contraseña (para usuarios COMPRADOR)
@@ -182,10 +238,18 @@ export class AuthService {
         used_at: null,
         expires_at: { gt: new Date() },
       },
+      include: { user: true },
     });
 
     if (!resetRecord) {
       throw new UnauthorizedException('El enlace ha expirado o es inválido.');
+    }
+
+    // Los usuarios administrativos deben cambiar su clave mediante Keycloak
+    if (resetRecord.user.rol !== 'COMPRADOR') {
+      throw new ForbiddenException(
+        'La contraseña de esta cuenta se gestiona en Keycloak.',
+      );
     }
 
     const saltRounds = 10;
@@ -207,57 +271,42 @@ export class AuthService {
     ]);
 
     this.logger.log(`Contraseña restablecida exitosamente para UUID: ${resetRecord.user_uuid}`);
+    void this.audit?.record({ event: 'BUYER_PASSWORD_RESET', outcome: 'SUCCESS', subjectUuid: resetRecord.user_uuid });
   }
 
-  // HU-B4: Provisión de cuentas administrativas (ORGANIZADOR / STAFF)
-  // El usuario se crea manualmente en Keycloak; Auth solo persiste y notifica.
-  async provisionStaff(dto: ProvisionDto, creadorUuid: string) {
-    const conflictMsg = 'Los datos ingresados ya se encuentran registrados en la plataforma';
-    const ttlHours = Number(process.env.STAFF_INVITE_TOKEN_TTL_HOURS) || 72;
-
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
-
-    let newUser: { uuid: string; email: string; nombre: string; rut: string; rol: string; creado_por_id: string | null };
-
+  /**
+   * Sincroniza una cuenta creada previamente en Keycloak. No necesita ADMIN
+   * en PostgreSQL ni crea identidades en Keycloak.
+   * Solo crea la invitación pendiente: OutboxWorker publica de modo confiable.
+   */
+  async provisionStaff(dto: ProvisionDto) {
+    const email = dto.email.trim().toLowerCase();
+    const kc = await this.keycloakService.getUserByEmail(email);
+    if (!kc.enabled) throw new ForbiddenException('Cuenta deshabilitada en Keycloak');
+    const conflictMsg = 'Email, RUT o UUID pertenecen a otra identidad PostgreSQL';
     try {
-      newUser = await this.prisma.$transaction(async (tx) => {
-        const creador = await tx.user.findUnique({
-          where: { uuid: creadorUuid },
-          select: { uuid: true },
-        });
-        if (!creador) {
-          throw new UnauthorizedException('El usuario creador no existe');
+      return await this.prisma.$transaction(async (tx) => {
+        const byUuid = await tx.user.findUnique({ where: { uuid: kc.id } });
+        if (byUuid) {
+          // Idempotencia: no volver a enviar si ya existe. Modificaciones
+          // de rol/perfil se reconcilian por KeycloakSyncService.
+          if (byUuid.email.toLowerCase() !== kc.email || byUuid.rol === 'COMPRADOR') {
+            throw new ConflictException(conflictMsg);
+          }
+          return { user: byUuid, creada: false, invitacionProgramada: false };
         }
-
-        const exists = await tx.user.findFirst({
-          where: { OR: [{ email: dto.email }, { rut: dto.rut }] },
-          select: { uuid: true },
-        });
-        if (exists) {
-          throw new ConflictException(conflictMsg);
-        }
-
-        const user = await tx.user.create({
-          data: {
-            email: dto.email,
-            rut: dto.rut,
-            nombre: dto.nombre,
-            rol: dto.rol,
-            password_hash: null,
-            cambio_obligatorio: true,
-            token_version: 0,
-            creado_por_id: creadorUuid,
-          },
-          select: { uuid: true, email: true, nombre: true, rut: true, rol: true, creado_por_id: true },
-        });
-
-        await tx.passwordResetToken.create({
-          data: { user_uuid: user.uuid, token_hash: tokenHash, expires_at: expiresAt },
-        });
-
-        return user;
+        const collision = await tx.user.findFirst({ where: { OR: [
+          { email: { equals: kc.email, mode: 'insensitive' } },
+          { rut: { in: [kc.rut, normalizeRut(kc.rut)] } },
+        ] } });
+        if (collision) throw new ConflictException(conflictMsg);
+        const user = await tx.user.create({ data: {
+          uuid: kc.id, email: kc.email, rut: kc.rut, nombre: kc.nombre,
+          rol: kc.rol, password_hash: null, cambio_obligatorio: true,
+          token_version: 0, creado_por_id: null, activo: true,
+        }});
+        await tx.staffInvitationOutbox.create({ data: { user_uuid: user.uuid } });
+        return { user, creada: true, invitacionProgramada: true };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -265,27 +314,27 @@ export class AuthService {
       }
       throw error;
     }
+  }
 
-    // Publicación posterior al COMMIT: nunca se notifica una cuenta no persistida
-    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
-    const notificacionPublicada = await this.notificationService.sendStaffAccountEmail({
-      email_destino: newUser.email,
-      url: `${frontendUrl}/crear-clave?token=${rawToken}`,
+  /** Reenvío interno: encola una invitación nueva, sin acceso del navegador. */
+  async reenviarInvitacionStaff(email: string): Promise<{ publicada: boolean; programada: boolean }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user || !['STAFF','ORGANIZADOR'].includes(user.rol) || !user.cambio_obligatorio || !user.activo) {
+      throw new ForbiddenException('Cuenta no elegible para reenvío');
+    }
+    const kc = await this.keycloakService.getUserByEmail(user.email);
+    if (!kc.enabled || kc.id !== user.uuid || kc.rol !== user.rol) {
+      throw new ForbiddenException('La identidad ya no coincide con Keycloak');
+    }
+    await this.prisma.staffInvitationOutbox.upsert({
+      where: { user_uuid: user.uuid },
+      create: { user_uuid: user.uuid },
+      update: { status: 'PENDING', next_attempt_at: new Date(), locked_until: null, sent_at: null },
     });
-
-    this.logger.log(
-      `[HU-B4] Cuenta ${newUser.rol} provisionada uuid=${newUser.uuid} creado_por_id=${creadorUuid} evento_cuenta_staff=${notificacionPublicada ? 'PUBLICADO' : 'FALLIDO'}`,
-    );
-
-    return {
-      message: 'Cuenta provisionada exitosamente',
-      user: newUser,
-      notificacion: {
-        evento: 'cuenta_staff',
-        publicada: notificacionPublicada,
-        enlace_expira_en: expiresAt.toISOString(),
-      },
-    };
+    // La respuesta no afirma envío; este lo confirma el worker mediante RabbitMQ.
+    void this.audit?.record({ event: 'STAFF_INVITE_RESCHEDULED', outcome: 'PENDING', subjectUuid: user.uuid });
+    return { publicada: false, programada: true };
   }
 
   // HU-F4 / Primer inicio: validar enlace al abrir la página (sin consumir el token)
@@ -321,9 +370,9 @@ export class AuthService {
       usuario: {
         id_usuario: user.uuid,
         nombre_completo: user.nombre,
-        rut: user.rut,
+        rut: formatRut(user.rut),
         correo_electronico: user.email,
-        rol: user.rol
+        rol: mapRolContrato(user.rol)
       }
     };
   }

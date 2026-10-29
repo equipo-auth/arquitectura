@@ -24,3 +24,6 @@ yarn-debug.log*
 # Keys
 *.pem
 *.key
+
+# Copias locales de Keycloak, no compartir (incluyen credenciales)
+keycloak-respaldo-*/

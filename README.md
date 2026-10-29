@@ -1,3 +1,22 @@
+> **Contrato general vigente propuesto:** [CONTRATO_INTEGRACION_AUTH.md](CONTRATO_INTEGRACION_AUTH.md) · [Aplicar cambios v1.1](GUIA_ACTUALIZACION_V1_1.md).
+
+> **Trazas y demostración:** ver [GUIA_LOGS_Y_DEMO.md](GUIA_LOGS_Y_DEMO.md) para auditoría en PostgreSQL y enlace temporal visible solo en desarrollo.
+
+# TITEC Auth — sincronización AUTOMÁTICA desde Keycloak
+
+**Guía vigente:** [GUIA_AUTOMATIZACION_Y_ARRANQUE.md](./GUIA_AUTOMATIZACION_Y_ARRANQUE.md).
+
+- Compradores: registro y recuperación por PostgreSQL (bcrypt).
+- Staff/Organizador: creación manual SOLO en Keycloak, sincronización periódica
+  desde NestJS, UUID idéntico en PostgreSQL, invitación por RabbitMQ.
+- NO hay un segundo administrador de provisión en PostgreSQL.
+- Nunca ejecuta `ensureStaffUser()` ni crea usuarios en Keycloak.
+- El campo `password_hash` en Auth PostgreSQL es nulo para Staff; la
+  credencial de Staff se conserva en el almacén de Keycloak.
+
+> Los documentos anteriores del repositorio se conservan como referencia
+> histórica; la guía anterior es la fuente de verdad para el arranque actual.
+
 # Arquitectura - TITEC (Equipo Auth)
 
 Este repositorio contiene la estructura base del microservicio de Autenticación, dividido en Backend (NestJS) y Frontend (React).

@@ -33,6 +33,11 @@ export default function NewPasswordForm({
   onSubmit,
 }: Props) {
   const searchParams = useSearchParams();
+  // Capturar UNA sola vez el token de entrada. En Next App Router,
+  // history.replaceState sincroniza useSearchParams con la URL; si el efecto
+  // depende de searchParams, al ocultar el token vuelve a ejecutarse sin él
+  // y marca un enlace válido como inválido.
+  const [initialToken] = useState<string | null>(() => searchParams.get("token"));
   const [token, setToken] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -41,14 +46,20 @@ export default function NewPasswordForm({
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const value = searchParams.get("token");
+    const value = initialToken;
     if (!value) {
       setMessage({ kind: "error", text: INVALID_LINK });
       setChecking(false);
       return;
     }
     // Quita el token de la barra de direcciones e historial.
-    window.history.replaceState(null, "", window.location.pathname);
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("token");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+    );
 
     // HU-F4: el enlace expirado o usado se informa al abrir la página.
     let active = true;
@@ -64,7 +75,7 @@ export default function NewPasswordForm({
     return () => {
       active = false;
     };
-  }, [searchParams]);
+  }, [initialToken]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

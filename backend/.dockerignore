@@ -1,0 +1,14 @@
+
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+*.pem
+*.key
+*.log
+*.dump
+*.zip
+*.tar.gz
+*.tsbuildinfo

@@ -1,6 +1,6 @@
-import ProvisionForm from "@/modules/auth/components/ProvisionForm";
+import { redirect } from "next/navigation";
 
-// HU-B4: provisión de cuentas ORGANIZADOR / STAFF (solo ADMIN)
+// No existe un segundo administrador TITEC: las altas se hacen en Keycloak.
 export default function ProvisionPage() {
-  return <ProvisionForm />;
+  redirect("/admin/login");
 }

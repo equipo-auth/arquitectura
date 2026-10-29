@@ -42,6 +42,13 @@ describe('InternalController /internal/validar-sesion', () => {
     });
   });
 
+  it('retorna RUT con puntos aunque exista un registro legado sin puntos', () => {
+    const result = controller.validarSesion({
+      user: { ...baseUser, rut: '12345678-5', rol: 'COMPRADOR' },
+    } as any);
+    expect(result.usuario.rut).toBe('12.345.678-5');
+  });
+
   it('un rol desconocido (ADMIN/CLIENTE) responde 401 (Fail-Secure)', () => {
     expect(() =>
       controller.validarSesion({ user: { ...baseUser, rol: 'ADMIN' } } as any),

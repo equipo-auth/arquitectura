@@ -16,6 +16,7 @@ model User {
   rol                String   @db.VarChar(50)
   token_version      Int      @default(0) // Utilizado para invalidar JWTs tras cambio de clave
   cambio_obligatorio Boolean  @default(false)
+  activo             Boolean  @default(true) // Sincronizado con enabled/rol en Keycloak
   creado_por_id      String?  @db.Uuid
   created_at         DateTime @default(now()) @db.Timestamptz
   updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz
@@ -24,6 +25,7 @@ model User {
   subordinados       User[] @relation("JerarquiaUsuarios")
 
   password_reset_tokens PasswordResetToken[]
+  invitacion_outbox StaffInvitationOutbox?
   revocations_received  SessionRevocada[]    @relation("TargetUser")
   revocations_performed SessionRevocada[]    @relation("RevokedBy")
 
@@ -54,4 +56,45 @@ model SessionRevocada {
   revoked_by_user User @relation("RevokedBy", fields: [revoked_by], references: [uuid], onDelete: Cascade)
 
   @@map("session_revocada")
+}
+
+/// Auditoría persistente sin datos secretos. No guardar tokens ni contraseñas.
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  occurred_at  DateTime @default(now()) @db.Timestamptz
+  event        String   @db.VarChar(80)
+  outcome      String   @db.VarChar(20)
+  actor_uuid   String?  @db.Uuid
+  subject_uuid String?  @db.Uuid
+  method       String?  @db.VarChar(10)
+  path         String?  @db.VarChar(255)
+  status_code  Int?
+  duration_ms  Int?
+  request_id   String?  @db.VarChar(36)
+  detail       String?  @db.VarChar(300)
+
+  @@index([occurred_at])
+  @@index([actor_uuid, occurred_at])
+  @@index([subject_uuid, occurred_at])
+  @@index([event, occurred_at])
+  @@map("audit_logs")
+}
+
+/// Outbox transaccional: ninguna invitación se pierde cuando RabbitMQ está desconectado.
+/// No se guarda aquí el token en claro. Se genera al intentar publicar.
+model StaffInvitationOutbox {
+  id               String    @id @default(uuid()) @db.Uuid
+  user_uuid        String    @unique @db.Uuid
+  status           String    @default("PENDING") @db.VarChar(20)
+  attempts         Int       @default(0)
+  next_attempt_at  DateTime  @default(now()) @db.Timestamptz
+  locked_until     DateTime? @db.Timestamptz
+  last_error       String?   @db.Text
+  sent_at          DateTime? @db.Timestamptz
+  created_at       DateTime  @default(now()) @db.Timestamptz
+  updated_at       DateTime  @updatedAt @db.Timestamptz
+  user             User      @relation(fields: [user_uuid], references: [uuid], onDelete: Cascade)
+
+  @@index([status, next_attempt_at])
+  @@map("staff_invitation_outbox")
 }

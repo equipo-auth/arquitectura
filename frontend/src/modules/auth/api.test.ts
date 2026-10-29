@@ -138,7 +138,7 @@ describe("HU-F4: recuperación", () => {
 });
 
 describe("HU-B4: provisionAccount", () => {
-  const payload = { rut: "12.345.678-5", email: "n@t.cl", nombre: "N", rol: "STAFF" as const };
+  const payload = { email: "n@t.cl" };
 
   it("mapea 403 y 409 a mensajes claros", async () => {
     respond(403);

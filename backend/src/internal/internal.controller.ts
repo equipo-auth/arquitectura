@@ -20,8 +20,9 @@ import { InternalApiKeyGuard } from '../common/internal-api-key.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { mapRolContrato, RolContrato } from '../auth/rol-contrato';
 import type { SessionUser } from '../auth/jwt.strategy';
+import { formatRut } from '../common/rut';
 
-/** Respuesta 200 según Contrato Panel v1.1 y Contrato Entradas v3.0 */
+/** Respuesta 200 según contrato general de Auth */
 export interface ValidarSesionResponse {
   valido: true;
   usuario: {
@@ -119,7 +120,7 @@ export class InternalController {
   })
   @ApiOperation({
     summary:
-      'Introspección centralizada de sesión (Panel Organizador / Entradas)',
+      'Introspección centralizada de sesión para servicios autorizados',
   })
   @ApiResponse({
     status: 200,
@@ -144,7 +145,7 @@ export class InternalController {
       usuario: {
         id_usuario: user.uuid,
         nombre_completo: user.nombre,
-        rut: user.rut,
+        rut: formatRut(user.rut),
         correo_electronico: user.email,
         rol: mapRolContrato(user.rol),
       },
