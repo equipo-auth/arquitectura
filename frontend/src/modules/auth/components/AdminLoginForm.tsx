@@ -50,6 +50,11 @@ export default function AdminLoginForm() {
         return;
       }
 
+      if (session?.usuario.rol.toUpperCase() === 'ORGANIZADOR' && process.env.NEXT_PUBLIC_PANEL_URL) {
+        window.location.assign(process.env.NEXT_PUBLIC_PANEL_URL);
+        return;
+      }
+
       router.replace(destino);
     } catch (error) {
       if (error instanceof AuthApiError && error.status === 429) {

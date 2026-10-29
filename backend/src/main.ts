@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -23,17 +24,20 @@ async function bootstrap() {
 
   // Configuración de CORS
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-  app.enableCors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:3001',
-      frontendUrl,
-    ],
-    credentials: true,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key',
-  });
+
+  if (process.env.ENABLE_CORS !== 'false') {
+    app.enableCors({
+      origin: [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'http://localhost:3001',
+        frontendUrl,
+      ],
+      credentials: true,
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key',
+    });
+  }
 
   // Configuracion del swagger
   const config = new DocumentBuilder()
@@ -42,7 +46,7 @@ async function bootstrap() {
     .setVersion('1.0')
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/auth/docs', app, document);
 
   // Listener híbrido: notificaciones.events -> correo_auth
   app.connectMicroservice<MicroserviceOptions>(buildNotificacionesServerOptions());
@@ -51,6 +55,6 @@ async function bootstrap() {
   const port = process.env.PORT || 10000;
   await app.listen(port);
   console.log(`Backend de Autenticación corriendo en el puerto ${port}`);
-  console.log(`Documentación Swagger disponible en http://localhost:${port}/api/docs`);
+  console.log(`Documentación Swagger disponible en http://localhost:${port}/api/auth/docs`);
 }
 bootstrap();

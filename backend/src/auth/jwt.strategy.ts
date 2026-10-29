@@ -12,6 +12,19 @@ export interface JwtPayload {
   iat?: number;
   exp?: number;
 }
+export interface SessionUser {
+  uuid: string;
+  email: string;
+  nombre: string;
+  rut: string;
+  rol: string;
+  token_version: number;
+}
+/** La introspección contractual solo acepta la cookie HttpOnly "jwt". */
+export const extractJwtFromCookie = (req: Request): string | null => {
+  const value = req?.cookies?.['jwt'];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -20,18 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly prisma: PrismaService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        (req: Request) => {
-          let token: string | null = null;
-          if (req && req.cookies) {
-            token = req.cookies['jwt_token'] || req.cookies['auth_token'] || req.cookies['jwt'] || req.cookies['token'];
-          }
-          if (!token) {
-            token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-          }
-          return token;
-        },
-      ]),
+      jwtFromRequest: ExtractJwt.fromExtractors([extractJwtFromCookie]),
       ignoreExpiration: false,
       secretOrKey: rsaKeyService.getPublicKey(),
       algorithms: ['RS256'],
@@ -49,13 +51,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         uuid: true,
         email: true,
         nombre: true,
+        rut: true,
         rol: true,
         token_version: true,
+        cambio_obligatorio: true,
+        activo: true,
       },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('El usuario no existe o fue eliminado');
+    if (!user || user.activo === false) {
+      throw new UnauthorizedException('El usuario no existe o fue deshabilitado');
+    }
+
+    // Una cuenta administrativa sin activación completa no puede operar con JWT.
+    if (user.rol !== 'COMPRADOR' && user.cambio_obligatorio === true) {
+      throw new UnauthorizedException('Cuenta administrativa pendiente de activación');
     }
 
     // Verificación de revocación de sesión (HU-B8)

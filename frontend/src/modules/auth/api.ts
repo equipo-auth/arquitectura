@@ -156,10 +156,8 @@ export type AdminLoginResult =
   | { kind: "password_change"; url: string };
 
 export type ProvisionPayload = {
-  rut: string;
+  // Keycloak es fuente de UUID, nombre, RUT y rol; Auth solo recibe email.
   email: string;
-  nombre: string;
-  rol: "ORGANIZADOR" | "STAFF";
 };
 
 export type ProvisionResult = {

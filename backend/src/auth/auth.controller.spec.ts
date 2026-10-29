@@ -29,7 +29,7 @@ describe('AuthController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('HU-F3: primer inicio responde 403 con primer_inicio=true y URL /crear-clave', async () => {
+  it('HU-F3: primer inicio no crea un token sin probar identidad', async () => {
     mockAuthService.login.mockResolvedValue({
       requirePasswordChange: true,
       user: { uuid: 'u1' },
@@ -45,30 +45,16 @@ describe('AuthController', () => {
     expect(res.status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN);
     expect(body.primer_inicio).toBe(true);
     expect(body.action).toBe('REDIRECT');
-    expect(body.url).toBe('/crear-clave?token=tok');
+    expect(body.url).toBe('/recuperar');
+    expect(mockAuthService.generatePasswordResetToken).not.toHaveBeenCalled();
     expect(res.cookie).not.toHaveBeenCalled();
   });
 
-  it('HU-B4: /provision exige rol ADMIN', () => {
-    const roles = Reflect.getMetadata(
-      ROLES_KEY,
-      AuthController.prototype.provision,
-    );
-    expect(roles).toEqual(['ADMIN']);
-  });
-
-  it('HU-B4: /provision delega con el uuid del usuario autenticado', async () => {
-    mockAuthService.provisionStaff.mockResolvedValue({ ok: true });
-    const dto = {
-      rut: '12.345.678-5',
-      email: 'n@t.cl',
-      nombre: 'N',
-      rol: 'STAFF' as const,
-    };
-
-    await controller.provision(dto, { user: { uuid: 'admin-1' } });
-
-    expect(mockAuthService.provisionStaff).toHaveBeenCalledWith(dto, 'admin-1');
+  it('HU-B4: /provision es solo interno, sin ADMIN PostgreSQL', async () => {
+    mockAuthService.provisionStaff.mockResolvedValue({ invitacionProgramada: true });
+    const dto = { email: 'n@t.cl' };
+    await controller.provision(dto);
+    expect(mockAuthService.provisionStaff).toHaveBeenCalledWith(dto);
   });
 
   it('HU-F4: /validar-token delega en el servicio', async () => {

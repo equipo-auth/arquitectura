@@ -33,7 +33,7 @@ describe("validators", () => {
   it("HU-F3: redirige según rol y rechaza compradores", () => {
     expect(homeForRole("STAFF")).toBe("/checkin");
     expect(homeForRole("ORGANIZADOR")).toBe("/organizador");
-    expect(homeForRole("ADMIN")).toBe("/admin/provision");
+    expect(homeForRole("ADMIN")).toBeNull(); // El admin humano solo usa Keycloak
     expect(homeForRole("COMPRADOR")).toBeNull();
   });
 });

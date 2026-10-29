@@ -7,6 +7,7 @@ import { ProvisionDto } from './dto/provision.dto';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth } from '@nestjs/swagger';
+import { InternalApiKeyGuard } from '../common/internal-api-key.guard';
 
 export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest(err: any, user: any, info: any) {
@@ -42,18 +43,18 @@ export class AuthController {
     const result = await this.authService.login(dto);
 
     if (result.requirePasswordChange) {
-      const rawToken = await this.authService.generatePasswordResetToken(result.user.uuid);
-
-      res.status(HttpStatus.FORBIDDEN); 
-      return { 
-        message: 'Acción requerida: Primer inicio, debe cambiar su clave.',
+      // No emitir un token de cambio de clave desde un login fallido.
+      // El usuario debe utilizar su invitación o recuperación por correo.
+      res.status(HttpStatus.FORBIDDEN);
+      return {
+        message: 'Debe configurar su contraseña desde la invitación recibida.',
         primer_inicio: true,
         action: 'REDIRECT',
-        url: `/crear-clave?token=${rawToken}`
+        url: '/recuperar',
       };
     } 
 
-    res.cookie('jwt_token', result.token, {
+    res.cookie('jwt', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', 
       sameSite: 'strict',
@@ -104,17 +105,24 @@ export class AuthController {
 
   @Post('provision')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @ApiCookieAuth()
-  @ApiOperation({ summary: 'HU-B4: Provisión de cuentas ORGANIZADOR / STAFF' })
-  @ApiResponse({ status: 201, description: 'Cuenta creada sin contraseña, vinculada a creado_por_id. Evento cuenta_staff publicado en auth.events.' })
-  @ApiResponse({ status: 400, description: 'Payload inválido (RUT, email, nombre o rol).' })
-  @ApiResponse({ status: 401, description: 'Token faltante, expirado o revocado.' })
-  @ApiResponse({ status: 403, description: 'El usuario autenticado no posee rol ADMIN.' })
-  @ApiResponse({ status: 409, description: 'RUT o email ya registrados.' })
-  async provision(@Body() dto: ProvisionDto, @Req() req) {
-    return this.authService.provisionStaff(dto, req.user.uuid);
+  @UseGuards(InternalApiKeyGuard)
+  @ApiOperation({ summary: 'Endpoint interno de sincronización de respaldo (normalmente automático)' })
+  @ApiResponse({ status: 201, description: 'Espejo con UUID nativo de Keycloak. Evento cuenta_staff publicado en auth.events.' })
+  @ApiResponse({ status: 400, description: 'Email inválido o perfil/rol incompleto en Keycloak.' })
+  @ApiResponse({ status: 403, description: 'Solo servicios internos con x-api-key.' })
+  @ApiResponse({ status: 409, description: 'Email, RUT o UUID ya registrados.' })
+  async provision(@Body() dto: ProvisionDto) {
+    return this.authService.provisionStaff(dto);
+  }
+
+  @Post('provision/reenviar')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(InternalApiKeyGuard)
+  @ApiOperation({ summary: 'Reenviar invitación de STAFF/ORGANIZADOR pendiente de activación' })
+  @ApiResponse({ status: 200, description: 'Invitación encolada para publicación fiable: {programada: true}.' })
+  @ApiResponse({ status: 403, description: 'API key inválida o cuenta no elegible.' })
+  async reenviarInvitacionStaff(@Body() dto: RecoverDto) {
+    return this.authService.reenviarInvitacionStaff(dto.email);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -133,7 +141,7 @@ export class AuthController {
   @ApiOperation({ summary: 'HU-B3: Destrucción de cookie de sesión activa' })
   @ApiResponse({ status: 200, description: 'Instruye al navegador a destruir la cookie HttpOnly.' })
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('jwt_token', {
+    res.clearCookie('jwt', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
