@@ -40,3 +40,4 @@ USER node
 EXPOSE 10000
 
 CMD ["node", "dist/main.js"]
+
