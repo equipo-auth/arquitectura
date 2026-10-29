@@ -1,10 +1,5 @@
-> **Contrato general vigente propuesto:** [CONTRATO_INTEGRACION_AUTH.md](CONTRATO_INTEGRACION_AUTH.md) · [Aplicar cambios v1.1](GUIA_ACTUALIZACION_V1_1.md).
-
-> **Trazas y demostración:** ver [GUIA_LOGS_Y_DEMO.md](GUIA_LOGS_Y_DEMO.md) para auditoría en PostgreSQL y enlace temporal visible solo en desarrollo.
 
 # TITEC Auth — sincronización AUTOMÁTICA desde Keycloak
-
-**Guía vigente:** [GUIA_AUTOMATIZACION_Y_ARRANQUE.md](./GUIA_AUTOMATIZACION_Y_ARRANQUE.md).
 
 - Compradores: registro y recuperación por PostgreSQL (bcrypt).
 - Staff/Organizador: creación manual SOLO en Keycloak, sincronización periódica
