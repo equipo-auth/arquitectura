@@ -156,7 +156,7 @@ describe('Integración /internal/validar-sesion (e2e)', () => {
     }
   });
 
-  it('/api/auth/provision rechaza sin x-api-key (403)', async () => {
+  it('/api/auth/provision sin API key responde 403', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/provision')
       .send({ rut: '12.345.678-5', email: 'n@t.cl', nombre: 'N', rol: 'STAFF' })
