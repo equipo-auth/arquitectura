@@ -8,6 +8,8 @@ coverage
 *.pem
 *.key
 *.log
+*.db
+*.sqlite
 *.dump
 *.zip
 *.tar.gz
