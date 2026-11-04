@@ -97,3 +97,145 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+
+---
+
+## Evaluación 2 — integración REAL con Platform Team (sin mocks)
+
+Esta guía complementa el README histórico. **No levantes dos RabbitMQ.** Los puertos y rutas del Gateway y del broker se toman del repositorio [FWizav/backendticketU](https://github.com/FWizav/backendticketU) (`main`). Las pruebas siguientes requieren procesos reales; una respuesta de un mock NO constituye evidencia de integración.
+
+### 0. Puertos OFICIALES y conflictos comprobados
+
+| Servicio | Puerto host | Puerto contenedor / destino | Observación |
+|---|---:|---:|---|
+| Gateway oficial | 8080 | 8080 | `ticketu-api-gateway` |
+| Broker oficial RabbitMQ | 5672, 15672 | 5672, 15672 | `ticketu-rabbitmq` |
+| Auth NestJS (nativo) | 10000 | — | NO modificar |
+| Auth PostgreSQL (compose de Auth) | 5433 | 5432 | No ocupa 5432 en el host |
+| Auth Keycloak (compose de Auth) | 8081 | 8080 | No ocupa 8080 en el host |
+| Front común Next.js (Auth) | 3001 | — o 3000 en Docker | Ejecutar `npm run dev -- -p 3001` |
+| Entradas (compose contraparte) | 3000 | 3000 | **Ocupación efectiva del host 3000** |
+| Entradas MongoDB (compose contraparte) | 27017 | 27017 | Si otro MongoDB publica 27017, conflicto |
+| Panel Organizador (compose integración) | sin publicación host | 3000 interno | No choca con Entradas en el host; otra IP de contenedor |
+
+**Conflicto BLOQUEANTE:** `backend/docker-compose.yml` de Auth también define `ticketu-rabbitmq` en 5672/15672. No ejecutes `docker compose up -d` a secas dentro de Auth cuando corre el broker oficial. En su lugar, levanta SOLO `db` y `keycloak` (comando abajo). No se sustituye puerto alguno.
+
+**Conflicto condicional:** la app Next.js sin `-p 3001` intenta usar 3000, que ya publica Entradas. En el repositorio Auth, el compose del frontend YA publica `3001:3000`: el equivalente nativo debe usar `-p 3001`.
+
+### 1. Preparación
+
+```bash
+# máquina que aloja los contenedores; solo si la red no existe:
+docker network inspect plataforma-eventos-net >/dev/null 2>&1 || docker network create plataforma-eventos-net
+
+# terminal A, dentro del repo OFICIAL FWizav/backendticketU:
+cd event-broker
+cp -n .env.example .env
+# configurar credenciales del broker; deben coincidir con RABBITMQ_URL de Auth
+docker compose up -d --build
+
+docker compose ps
+# shell: comprobar health real, sin publicar secretos:
+curl -fsS http://localhost:15672/api/overview -u 'ticketu:ticketu_dev' >/dev/null
+
+El Compose oficial del broker solo levanta RabbitMQ. No garantiza por sí mismo que estén creados `auth.events`, `notificaciones.events` ni sus bindings específicos. Tras iniciar Auth/Notificaciones, verifica exchanges, colas y bindings en Management. Si faltan, coordina la declaración de topología con Platform/Notificaciones; NO levantes el segundo RabbitMQ de Auth para intentar resolverlo.
+```
+
+Si el broker ya está levantado, no lo recrees: `docker ps --format '{{.Names}} {{.Ports}}'` permite verificarlo. **No levantes el broker propio de Auth**.
+
+### 2. Dependencias internas de Auth, sin broker duplicado
+
+```bash
+cd /ruta/al/repo-auth/backend
+cp -n .env.example .env
+# Configurar DATABASE_URL, KEYCLOAK_* e INTERNAL_API_KEY en .env
+# NO subir .env ni llaves RSA.
+docker compose up -d db keycloak
+npm ci
+npx prisma generate
+npx prisma db push
+npm run start:dev
+```
+
+**Importante:** `backend/docker-compose.yml` declara `plataforma-eventos-net` como red externa, por lo que debe existir antes de levantarlo. El compose Auth usa PostgreSQL host 5433, Keycloak host 8081; son puertos host elegidos en ESTE repositorio, diferentes de sus puertos internos Docker.
+
+Configurar el `.env` de Auth con los valores reales del broker único:
+
+```dotenv
+PORT=10000
+DATABASE_URL=postgresql://admin:***@localhost:5433/ticketu?schema=public
+KEYCLOAK_URL=http://localhost:8081
+RABBITMQ_URL=amqp://ticketu:***@127.0.0.1:5672/ticketu
+RABBITMQ_AUTH_EXCHANGE=auth.events
+RABBITMQ_NOTIFICACIONES_EXCHANGE=notificaciones.events
+RABBITMQ_AUTH_INBOUND_QUEUE=auth.correo_auth
+INTERNAL_API_KEY=misma-clave-compartida-del-entorno
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3001
+COMPRADOR_FRONTEND_URL=http://localhost:3001
+```
+
+No uses literalmente `***`; debes usar los valores reales, preservando el mismo vhost, nombre de usuario y contraseña entre Auth y el broker. El archivo de ejemplo de Auth contiene otros valores de desarrollo, revisarlos antes de arrancar. El servicio `rabbitmq` de este Compose NO se debe iniciar cuando está activo el broker oficial FWizav.
+
+### 3. Gateway OFICIAL y ruta Auth
+
+Dentro de `FWizav/backendticketU/api-gateway`:
+
+```bash
+cp -n .env.example .env
+```
+
+**No usar** `AUTH_SERVICE_URL=http://auth-service:3000` del ejemplo oficial, porque Auth se ejecuta nativamente en puerto **10000**.
+
+En un Gateway en Docker, `localhost:10000` apunta al propio contenedor, no a Auth. En Linux (sin editar el compose oficial) configure `AUTH_SERVICE_URL=http://IP_ALCANZABLE_DEL_HOST:10000`, donde esa IP sea alcanzable desde la red Docker. Verifique firewall, ruta y que Nest escuche en una interfaz accesible. No usar una IP ficticia. En Windows/Mac con Docker Desktop suele poder usarse `http://host.docker.internal:10000`; en Linux esa entrada NO está garantizada, y necesitaría un mapeo `host-gateway` negociado en el compose oficial.
+
+```bash
+# Requiere URL del host revisada en api-gateway/.env:
+docker compose up -d --build
+curl -i http://localhost:8080/health
+curl -i http://localhost:8080/api/auth/docs
+```
+
+`/api/auth/docs` puede devolver redirección/HTML Swagger; confirma llegada al backend, no una sesión autenticada. El Gateway NO expone `/internal/*`; cada backend consumidor habla directo con Auth usando `Cookie` y `x-api-key`.
+
+### 4. Panel real, sin mock
+
+El Panel requiere actualizar su cliente `backend/src/modules/auth/auth.client.ts` para incluir el header `x-api-key` (parche separado del paquete). Su `.env` o `docker-compose.integracion.yml` debe incluir `AUTH_INTERNAL_API_KEY` compartida y una `AUTH_SERVICE_URL` alcanzable desde Docker, apuntando al puerto **10000**, NO 3000. **No usar `docker-compose.yml` de desarrollo del Panel**, que levanta `mock-auth` en 4001. Usar `docker-compose.integracion.yml` solo cuando se haya aplicado el parche de Panel.
+
+Panel backend usa 3000 **dentro del contenedor** y no lo publica; no entra en conflicto con Entradas 3000 **en el host**. Sin embargo, el Vite proxy original de Panel redirige `/api` a host 3000: si Entradas ocupa ese puerto, el frontend del Panel no funcionará de punta a punta hasta que su equipo apunte Vite a la ruta real del Gateway `/api/organizador/v1/panel/...`. Ese cambio pertenece al equipo Panel; no se cambió ningún puerto.
+
+### 5. Entradas real
+
+El `docker-compose.yml` de Entradas ya configura `AUTH_SERVICE_URL=http://auth-service:10000` y `x-api-key`, pero **ese nombre DNS no existe** si Auth corre nativamente. En la máquina de integración, deben configurar la URL accesible del host según su red. El compose de Entradas publica host 3000 y host 27017. No se permite iniciar otro servicio en esos mismos puertos.
+
+### 6. Notificaciones REAL y exchanges
+
+El broker oficial usa como ejemplo `ticketu.events`; la integración acordada Auth/Notificaciones requiere **otro exchange** `auth.events` (topic) para `cuenta_staff` y `recuperacion_cuenta`, y `notificaciones.events` para el resultado `correo_auth`. Eso NO es conflicto de puertos: son exchanges lógicos en el mismo RabbitMQ. Debe existir una cola REAL durable del consumidor Notificaciones, vinculada (`binding`) a `auth.events` con las routing keys exactas. El repositorio de Notificaciones suministrado muestra contratos, pero no el consumidor ejecutable: la integración real de correo no puede certificarse sin ese servicio.
+
+Verifica en RabbitMQ Management `http://localhost:15672` (usuario y contraseña del broker): vhost `ticketu`, exchanges `auth.events` y `notificaciones.events`, bindings `cuenta_staff` / `recuperacion_cuenta` hacia una cola de Notificaciones, y `correo_auth` hacia `auth.correo_auth`. Asegura que Auth marque `SENT` en la outbox y que el consumidor reciba el evento. Un log `PUBLICADO` en Auth significa enviado al broker, NO correo entregado.
+
+### 7. Pruebas efectivas para BE1 / CA1
+
+```bash
+# Una vez levantados los procesos reales
+export AUTH_URL=http://localhost:10000
+export GATEWAY_URL=http://localhost:8080
+export INTERNAL_API_KEY='VALOR_REAL_DE_ENV'
+# iniciar sesión con un comprador válido; guarde cookie localmente (no commitearla):
+curl -sS -c /tmp/auth-e2e-cookies.txt -H 'Content-Type: application/json' \
+  -d '{"email":"comprador@example.test","password":"CLAVE_REAL"}' \
+  "$AUTH_URL/api/auth/login"
+# Si la cuenta real existe y el login responde 200, usar cookie jar
+export COOKIE_JAR=/tmp/auth-e2e-cookies.txt
+bash /ruta/al/paquete/scripts/verificar-integracion.sh
+```
+
+Ejecutar el script desde la raíz del paquete descargado o por ruta absoluta. **No subir el cookie jar al repositorio.** Deben obtenerse efectivamente HTTP 403 sin API Key, HTTP 401 con API Key sin cookie, HTTP 200 con ambos válidos, y Gateway `/health` 200. El script corta la prueba si un código no coincide.
+
+Para probar I2, crea un STAFF real en Keycloak, verifica su espejo en Prisma Studio, su outbox y el evento entregado en la cola real de Notificaciones. Si ese consumidor no está disponible, reportar integración parcial; no sustituir por productor/consumidor mock.
+
+### 8. Límites de la validación
+
+Esta guía se realizó por inspección de GitHub. No se ejecutaron contenedores Docker, base de datos ni servicios remotos desde este entorno. Los puertos y topología están verificados en los `docker-compose.yml` citados, pero el estado de red y las pruebas de ejecución necesitan la máquina de integración.

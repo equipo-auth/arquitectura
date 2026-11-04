@@ -275,3 +275,64 @@ exacto de su servicio y en qué puerto expone la API.
 2. Levantar el API Gateway (su propio `docker-compose.yml`, conectado a esa red)
 3. Levantar los 9 microservicios (cada uno con su propio `docker-compose.yml`, conectados a esa red)
 4. Levantar el front: `docker compose up --build` (ya conectado a esa red)
+
+
+
+---
+
+## Evaluación 2 — arranque real e integración Auth/Pagos/Panel
+
+Esta sección se anexa al README existente; no requiere crear carpetas ni modificar Dockerfiles.
+
+**Puertos existentes: no reasignarlos.** El frontend Next.js oficial Auth se publica en **3001** mediante `frontend/docker-compose.yml` (`3001:3000`). En ejecución nativa, hay que fijar el puerto explícitamente; `next dev` sin argumento usa 3000, que está reservado por Entradas cuando se levanta su Docker Compose.
+
+### Desarrollo nativo con Gateway real
+
+```bash
+cd frontend
+cp -n .env.example .env.local
+npm ci
+npm run dev -- -p 3001
+```
+
+En `frontend/.env.local`:
+
+```dotenv
+NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
+NEXT_PUBLIC_AUTH_API_URL=http://localhost:10000
+```
+
+El valor local directo es útil para desarrollo en una misma máquina. **Para una integración entre computadores**, sustituir `localhost` por la dirección realmente alcanzable y revisar CORS/HTTPS; no se debe asumir que `localhost` referencia al ordenador de Auth desde otro PC.
+
+**Si se usa frontend en Docker**: `docker compose up -d --build` requiere `plataforma-eventos-net`; presenta la UI en host 3001 y no cambia puertos. Cuidado: las variables `NEXT_PUBLIC_*` de Next.js se incorporan durante `next build`; cambiar solo la variable del contenedor después de compilar no garantiza que cambie la URL que ve el navegador. Recompilar con los valores correctos o usar un proxy same-origin preparado por el Platform Team.
+
+### Redirección post-login de Pagos v1.5
+
+El parche `patches/auth-login-volver.patch` agrega al componente Auth una comprobación de `?volver=` tras login exitoso. Se aceptan únicamente rutas o URLs del **mismo origen exacto** (protocolo + hostname + puerto). Se rechazan `//dominio`, `javascript:` y URLs externas. No se modifican las solicitudes de login ni la configuración de cookies.
+
+Prueba manual real en el navegador (front en 3001, Auth en 10000):
+
+```text
+http://localhost:3001/auth?volver=%2Fpagos
+```
+
+Con comprador real, el login debería llevar a `/pagos`. Pruebas negativas: `?volver=https://example.org`, `?volver=//example.org`, `?volver=javascript:alert(1)` deben permanecer en Auth. **No se modifica esta regla para permitir otro puerto**: si Pagos está en otro origen, deben colocarse rutas bajo el mismo origen mediante infraestructura compartida o negociar explícitamente una política más amplia y segura.
+
+### Cookies y cross-origin
+
+`jwt` se emite por Auth con `HttpOnly`, `SameSite=Strict` y `Secure` solo si `NODE_ENV=production`. Una llamada cross-origin usa `credentials: include`. Si el navegador visita `http://localhost:3001` pero Auth responde desde `http://IP_DE_OTRO_PC:10000`, `SameSite=Strict` puede impedir que la cookie participe en el flujo entre sitios distintos; CORS por sí solo no corrige este problema. Para la prueba final de varios PCs debe existir una arquitectura de mismo sitio/origen adecuada mediante Gateway/proxy (preferiblemente HTTPS en despliegue).
+
+### Verificación de frontend sin simulaciones
+
+1. Abrir `/auth` en el frontend real; registrar o usar COMPRADOR real.
+2. Realizar login y confirmar `Set-Cookie: jwt=...` en Network/DevTools (no copiar token a evidencia pública).
+3. Verificar retorno con `?volver=/pagos` y rechazo de dominios externos.
+4. Con servicios reales, navegar a una ruta protegida de Pagos/Panel. El backend consumidor debe reenviar `Cookie` y `x-api-key` a Auth. La consulta **HTTP 200** de `/internal/validar-sesion` demuestra autenticación; una pantalla de login sin solicitud S2S real no basta.
+5. Mantener evidencia de HTTP 200/401/403 del backend, evitando revelar contraseñas, tokens y API Keys.
+
+### Restricciones conocidas fuera del repositorio Auth
+
+- **Panel:** el código publicado carece de `x-api-key` S2S y su `docker-compose.integracion.yml` apunta por defecto a `auth-service:3000`. Requiere que el equipo aplique el parche incluido y configure URL host:10000.
+- **Pagos:** todavía no se proporcionó su repositorio propio; no es posible comprobar su implementación real.
+- **Notificaciones:** el repositorio dado no contiene consumidor RabbitMQ ejecutable verificable; no se puede afirmar que haya correo realmente entregado.
+- **Gateway FWizav:** expone 8080 y conserva los prefijos `/api/<modulo>/*` sin reescritura; no publica `/internal/*`.
