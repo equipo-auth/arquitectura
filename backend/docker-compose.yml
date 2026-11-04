@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: adminpassword
       POSTGRES_DB: ticketu
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -33,11 +33,19 @@ services:
       RABBITMQ_DEFAULT_USER: ticketu
       RABBITMQ_DEFAULT_PASS: ticketu_dev
       RABBITMQ_DEFAULT_VHOST: ticketu
+    command: >
+      bash -c "
+        rabbitmq-server &
+        until rabbitmq-diagnostics -q ping >/dev/null 2>&1; do sleep 2; done;
+        /bin/bash /etc/rabbitmq/init-auth-notifications.sh;
+        wait
+      "
     ports:
       - "5672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./tools/init-rabbitmq-auth.sh:/etc/rabbitmq/init-auth-notifications.sh:ro
     networks:
       - default
       - plataforma-eventos-net

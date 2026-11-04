@@ -16,7 +16,7 @@ docker exec ticketu-rabbitmq rabbitmq-diagnostics -q ping || true
 printf '\n%s\n' '--- SERVICIOS HTTP ---'
 check_http 'Keycloak realm' 'http://localhost:8081/realms/ticketu-realm/.well-known/openid-configuration'
 check_http 'Auth NestJS' 'http://localhost:10000/api/health'
-check_http 'Frontend Next.js' 'http://localhost:3000/admin/login'
+check_http 'Frontend Next.js' 'http://localhost:3001/admin/login'
 check_http 'Panel (opcional)' 'http://localhost:5173'
 printf '\n%s\n' '--- OUTBOX ---'
 docker exec ticketu-db psql -U admin -d ticketu -c 'SELECT status,COUNT(*) FROM staff_invitation_outbox GROUP BY status ORDER BY status;' 2>/dev/null || echo 'No se pudo consultar la tabla outbox; ejecuta prisma db push.'

@@ -214,8 +214,8 @@ export class AuthService {
     const rawToken = await this.generatePasswordResetToken(user.uuid);
     const frontendUrl = (
       user.rol === 'COMPRADOR'
-        ? process.env.COMPRADOR_FRONTEND_URL || 'http://localhost:3000'
-        : process.env.FRONTEND_URL || 'http://localhost:5173'
+        ? process.env.COMPRADOR_FRONTEND_URL || 'http://localhost:3001'
+        : process.env.FRONTEND_URL || 'http://localhost:3001'
     ).replace(/\/+$/, '');
     const recoveryUrl = user.rol === 'COMPRADOR'
       ? `${frontendUrl}/restablecer?token=${rawToken}`

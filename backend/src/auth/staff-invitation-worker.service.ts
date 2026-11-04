@@ -67,7 +67,7 @@ export class StaffInvitationWorkerService implements OnModuleInit, OnModuleDestr
           }
           const ttlHours = Math.max(1, Number(process.env.STAFF_INVITE_TOKEN_TTL_HOURS) || 72);
           const rawToken = await this.auth.generatePasswordResetToken(user.uuid, ttlHours * 60);
-          const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+          const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').replace(/\/+$/, '');
           const publicada = await this.notifications.sendStaffAccountEmail({
             email_destino: user.email,
             url: `${frontendUrl}/crear-clave?token=${rawToken}`,

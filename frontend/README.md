@@ -14,7 +14,7 @@ demás. Este documento explica exactamente qué carpetas le corresponden a cada 
 ```bash
 npm install        # instala dependencias
 cp .env.example .env.local   # copia las variables de entorno
-npm run dev        # levanta el proyecto en http://localhost:3000
+npm run dev        # levanta el proyecto en http://localhost:3001
 ```
 
 Abran `.env.local` y configuren `NEXT_PUBLIC_GATEWAY_URL` con la URL real del API Gateway.
@@ -214,7 +214,7 @@ no la de desarrollo):
 
 ```bash
 npm run build   # compila el proyecto para producción
-npm run start   # sirve la versión compilada en http://localhost:3000
+npm run start   # sirve la versión compilada en http://localhost:3001
 ```
 
 Diferencia clave: `npm run dev` es para programar (recarga rápido, pero es más lento en
@@ -240,7 +240,7 @@ docker compose up --build
 ```
 
 Esto compila la imagen (`npm install` + `npm run build` dentro del contenedor) y levanta
-el front en `http://localhost:3000`, igual que en producción.
+el front en `http://localhost:3001`, igual que en producción.
 
 ### La parte importante: cómo se conecta con el Gateway y los microservicios
 
