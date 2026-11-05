@@ -45,6 +45,7 @@ describe('AuthService', () => {
   const mockNotificationService = {
     sendRecoveryEmail: jest.fn(),
     sendStaffAccountEmail: jest.fn(),
+    sendStaffActivationNotice: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -107,6 +108,17 @@ describe('AuthService', () => {
           nombre: 'Test User',
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('Roles vigentes: solo comprador, organizador y staff', () => {
+    it('rechaza cualquier valor extraño, incluyendo ADMIN', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        uuid: 'u-inesperado', email: 'no-rol@t.cl', rol: 'ADMIN', activo: true,
+        token_version: 0,
+      });
+      await expect(service.login({ email: 'no-rol@t.cl', password: 'clave', admin: true }))
+        .rejects.toThrow(UnauthorizedException);
     });
   });
 

@@ -275,3 +275,100 @@ exacto de su servicio y en qué puerto expone la API.
 2. Levantar el API Gateway (su propio `docker-compose.yml`, conectado a esa red)
 3. Levantar los 9 microservicios (cada uno con su propio `docker-compose.yml`, conectados a esa red)
 4. Levantar el front: `docker compose up --build` (ya conectado a esa red)
+
+
+
+---
+
+## Evaluación 2 — arranque real e integración Auth/Pagos/Panel
+
+Esta sección se anexa al README existente; no requiere crear carpetas ni modificar Dockerfiles.
+
+**Puertos existentes: no reasignarlos.** El frontend Next.js oficial Auth se publica en **3001** mediante `frontend/docker-compose.yml` (`3001:3000`). En ejecución nativa, hay que fijar el puerto explícitamente; `next dev` sin argumento usa 3000, que está reservado por Entradas cuando se levanta su Docker Compose.
+
+### Desarrollo nativo con Gateway real
+
+```bash
+cd frontend
+cp -n .env.example .env.local
+npm ci
+npm run dev -- -p 3001
+```
+
+En `frontend/.env.local`:
+
+```dotenv
+NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
+NEXT_PUBLIC_AUTH_API_URL=http://localhost:10000
+```
+
+El valor local directo es útil para desarrollo en una misma máquina. **Para una integración entre computadores**, sustituir `localhost` por la dirección realmente alcanzable y revisar CORS/HTTPS; no se debe asumir que `localhost` referencia al ordenador de Auth desde otro PC.
+
+**Si se usa frontend en Docker**: `docker compose up -d --build` requiere `plataforma-eventos-net`; presenta la UI en host 3001 y no cambia puertos. Cuidado: las variables `NEXT_PUBLIC_*` de Next.js se incorporan durante `next build`; cambiar solo la variable del contenedor después de compilar no garantiza que cambie la URL que ve el navegador. Recompilar con los valores correctos o usar un proxy same-origin preparado por el Platform Team.
+
+### Redirección post-login de Pagos v1.5
+
+El parche `patches/auth-login-volver.patch` agrega al componente Auth una comprobación de `?volver=` tras login exitoso. Se aceptan únicamente rutas o URLs del **mismo origen exacto** (protocolo + hostname + puerto). Se rechazan `//dominio`, `javascript:` y URLs externas. No se modifican las solicitudes de login ni la configuración de cookies.
+
+Prueba manual real en el navegador (front en 3001, Auth en 10000):
+
+```text
+http://localhost:3001/auth?volver=%2Fpagos
+```
+
+Con comprador real, el login debería llevar a `/pagos`. Pruebas negativas: `?volver=https://example.org`, `?volver=//example.org`, `?volver=javascript:alert(1)` deben permanecer en Auth. **No se modifica esta regla para permitir otro puerto**: si Pagos está en otro origen, deben colocarse rutas bajo el mismo origen mediante infraestructura compartida o negociar explícitamente una política más amplia y segura.
+
+### Cookies y cross-origin
+
+`jwt` se emite por Auth con `HttpOnly`, `SameSite=Strict` y `Secure` solo si `NODE_ENV=production`. Una llamada cross-origin usa `credentials: include`. Si el navegador visita `http://localhost:3001` pero Auth responde desde `http://IP_DE_OTRO_PC:10000`, `SameSite=Strict` puede impedir que la cookie participe en el flujo entre sitios distintos; CORS por sí solo no corrige este problema. Para la prueba final de varios PCs debe existir una arquitectura de mismo sitio/origen adecuada mediante Gateway/proxy (preferiblemente HTTPS en despliegue).
+
+### Verificación de frontend sin simulaciones
+
+1. Abrir `/auth` en el frontend real; registrar o usar COMPRADOR real.
+2. Realizar login y confirmar `Set-Cookie: jwt=...` en Network/DevTools (no copiar token a evidencia pública).
+3. Verificar retorno con `?volver=/pagos` y rechazo de dominios externos.
+4. Con servicios reales, navegar a una ruta protegida de Pagos/Panel. El backend consumidor debe reenviar `Cookie` y `x-api-key` a Auth. La consulta **HTTP 200** de `/internal/validar-sesion` demuestra autenticación; una pantalla de login sin solicitud S2S real no basta.
+5. Mantener evidencia de HTTP 200/401/403 del backend, evitando revelar contraseñas, tokens y API Keys.
+
+### Restricciones conocidas fuera del repositorio Auth
+
+- **Panel:** el código publicado carece de `x-api-key` S2S y su `docker-compose.integracion.yml` apunta por defecto a `auth-service:3000`. Requiere que el equipo aplique el parche incluido y configure URL host:10000.
+- **Pagos:** todavía no se proporcionó su repositorio propio; no es posible comprobar su implementación real.
+- **Notificaciones:** el repositorio dado no contiene consumidor RabbitMQ ejecutable verificable; no se puede afirmar que haya correo realmente entregado.
+- **Gateway FWizav:** expone 8080 y conserva los prefijos `/api/<modulo>/*` sin reescritura; no publica `/internal/*`.
+
+## Guía de historias e integración Auth (2026)
+
+### Ejecutar frontend auténtico (sin mocks)
+
+El puerto del frontend Auth es **3001**, backend Auth **10000**, Gateway oficial **8080**. En `frontend/`:
+
+```bash
+cp .env.example .env.local  # Solo primera vez; no sobrescribir variables locales
+# NEXT_PUBLIC_AUTH_API_URL=http://localhost:10000
+# NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
+npm ci
+npm run test
+npm run build
+npm run dev -- -p 3001
+```
+
+Abrir `http://localhost:3001/auth` (compradores) o `http://localhost:3001/admin/login` (STAFF/ORGANIZADOR). `http://localhost:3001/crear-clave?token=...` requiere token auténtico generado por el worker de Auth tras crear el usuario en Keycloak. No sirve una contraseña improvisada en PostgreSQL para STAFF.
+
+### Flujos de las historias
+
+- **F1** Registro: el frontend valida email/RUT y contraseña >=8 antes de enviar; backend también valida y guarda bcrypt. En HTTP local solo usar localhost; para producción HTTPS.
+- **F2** Login: recibe cookie `jwt` HttpOnly, no la lee en JavaScript. En error 401 muestra `Credenciales inválidas`; 429 bloquea envío.
+- **F2 / Pagos v1.5** `?volver=`: `http://localhost:3001/auth?volver=%2Fpagos` retorna a `/pagos` tras login. URLs `javascript:`, `//dominio` u otro origen son rechazadas. **Una URL de otro puerto no es Same-Origin**; para dominios/orígenes distintos se necesita un proxy/ruta acordada, no desactivar la validación.
+- **F3** Acceso administrativo: `/admin/login` requiere Keycloak para STAFF/ORGANIZADOR; se consulta el perfil con cookie antes de autorizar redirección. Solo existen roles COMPRADOR, ORGANIZADOR y STAFF; `admin: true` marca la ruta de ingreso del personal, no un cuarto rol. El operador usa la consola Keycloak; `/admin/provision` permanece deshabilitado.
+- **F4** Recuperación: `/recuperar` respuesta genérica; `/restablecer` para COMPRADOR; `/crear-clave` para STAFF/ORGANIZADOR. Los tokens tienen un solo uso, se eliminan de la barra de direcciones y cambian `token_version`.
+
+### Verificación rápida manual
+
+1. Registrar un comprador real y comprobar registro 201, duplicado 409.
+2. Login correcto y comprobar cookie `jwt` HttpOnly; contraseña mala devuelve 401, sexto fallo en 15 min devuelve 429 (administrativo cuarto).
+3. Iniciar sesión desde `/auth?volver=%2Fpagos` y confirmar regreso a la misma página. Probar `?volver=https%3A%2F%2Fejemplo.org` y verificar que no redirige.
+4. Solicitar recuperación; sin Notificaciones real NO llegará correo (no simular aprobación).
+5. Validar token de invitación, crear contraseña y volver a iniciar sesión con Keycloak.
+
+No hardcodear claves internas `INTERNAL_API_KEY` o `AUTH_OPERATIONS_KEY` en frontend, ni ponerlas en variables `NEXT_PUBLIC_*`.

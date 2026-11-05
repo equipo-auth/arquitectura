@@ -10,3 +10,9 @@ export interface CuentaStaffEvent {
   email_destino: string;
   url: string;
 }
+
+/** HU-B9: evento posterior a configurar la contraseña en Keycloak. */
+export interface StaffActivationEvent {
+  Id_usuario: string;
+  email_destino: string;
+}

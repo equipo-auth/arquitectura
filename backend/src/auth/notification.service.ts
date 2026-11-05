@@ -14,6 +14,7 @@ import {
 import {
   CuentaStaffEvent,
   RecuperacionCuentaEvent,
+  StaffActivationEvent,
 } from './messaging/auth-events.interface';
 
 const PUBLISH_TIMEOUT_MS = 5000; // SLA contrato v1.0 (≤ 5 s)
@@ -35,6 +36,14 @@ export class NotificationService implements OnApplicationShutdown {
     });
   }
 
+  /** HU-B9: notificación de cuenta activada (sin secretos). */
+  async sendStaffActivationNotice(payload: StaffActivationEvent): Promise<boolean> {
+    return this.publish(AUTH_EVENTS.STAFF_PRIMER_INICIO_COMPLETADO, {
+      Id_usuario: payload.Id_usuario,
+      email_destino: payload.email_destino,
+    });
+  }
+
   /** HU-B4 */
   async sendStaffAccountEmail(payload: CuentaStaffEvent): Promise<boolean> {
     return this.publish(AUTH_EVENTS.CUENTA_STAFF, {
@@ -45,7 +54,7 @@ export class NotificationService implements OnApplicationShutdown {
 
   private async publish(
     routingKey: string,
-    payload: CuentaStaffEvent | RecuperacionCuentaEvent,
+    payload: CuentaStaffEvent | RecuperacionCuentaEvent | StaffActivationEvent,
   ): Promise<boolean> {
     const exchange = rabbitConfig().authExchange;
     try {

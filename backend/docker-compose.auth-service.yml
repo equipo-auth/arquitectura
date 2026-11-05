@@ -1,0 +1,47 @@
+# Integración local: SOLO Auth. No define ni recrea db, keycloak o rabbitmq.
+# Ejecutar después de conectar esos contenedores a plataforma-eventos-net.
+# Mantener backend/.env y las llaves *.pem FUERA de la imagen Docker.
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ticketu-auth-local:4.2
+    container_name: ticketu-auth-service
+    env_file:
+      - .env
+    environment:
+      # En HTTP localhost de desarrollo se mantiene secure=false en la cookie.
+      # Para producción se debe usar NODE_ENV=production + HTTPS.
+      NODE_ENV: development
+      PORT: "10000"
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
+      KEYCLOAK_URL: "http://ticketu-keycloak:8080"
+      RABBITMQ_URL: "${DOCKER_RABBITMQ_URL:-amqp://ticketu:ticketu_dev@ticketu-rabbitmq:5672/ticketu}"
+    ports:
+      - "10000:10000"
+    volumes:
+      - type: bind
+        source: ./private.pem
+        target: /app/private.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./public.pem
+        target: /app/public.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - plataforma-eventos-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+
+networks:
+  plataforma-eventos-net:
+    external: true

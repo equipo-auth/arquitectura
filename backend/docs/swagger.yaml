@@ -1,115 +1,275 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: API de Autenticación - Auth Squad
-  description: Servicios de autenticación y gestión de usuarios para la plataforma de eventos.
-  version: 1.0.0
+  title: TITEC Auth - Contrato HTTP vigente
+  version: 2.0.0
+  description: >-
+    API de Autenticación NestJS. Auth conserva el contrato central de
+    introspección con cookie jwt y x-api-key. Las operaciones de provisión
+    utilizan Keycloak-first y un outbox. Los únicos roles de usuario son COMPRADOR, ORGANIZADOR y STAFF.
+    Revocación de emergencia usa clave operativa exclusiva, sin rol adicional.
 servers:
-  - url: http://localhost:10000/api/auth
-    description: Servidor de Desarrollo
+  - url: http://localhost:10000
+    description: Desarrollo local (Auth)
+tags:
+  - name: Auth
+  - name: Interno
+  - name: Administración operativa
+  - name: JWKS
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: jwt
+    internalKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+    adminOperationKey:
+      type: apiKey
+      in: header
+      name: x-operations-key
+  schemas:
+    LoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1 }
+        admin: { type: boolean, default: false }
+    RegisterBody:
+      type: object
+      required: [nombre, rut, email, password]
+      properties:
+        nombre: { type: string }
+        rut: { type: string, example: '12.345.678-5' }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    TokenPasswordBody:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8 }
+    SessionResult:
+      type: object
+      required: [valido, usuario]
+      properties:
+        valido: { type: boolean, example: true }
+        usuario:
+          type: object
+          required: [id_usuario, nombre_completo, rut, correo_electronico, rol]
+          properties:
+            id_usuario: { type: string, format: uuid }
+            nombre_completo: { type: string }
+            rut: { type: string, example: '12.345.678-5' }
+            correo_electronico: { type: string, format: email }
+            rol: { type: string, enum: [usuario, organizador, staff] }
 paths:
-  /registro:
-    post:
-      summary: Registrar nuevo comprador (HU-B1)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [nombre, rut, email, password]
-              properties:
-                nombre:
-                  type: string
-                rut:
-                  type: string
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  minLength: 6
+  /api/health:
+    get:
+      tags: [Auth]
+      summary: Estado HTTP de Auth
       responses:
-        '201':
-          description: Creado
-        '409':
-          description: Conflicto - RUT o email duplicado
-  /login:
+        '200': { description: Disponible }
+  /api/auth/register:
     post:
-      summary: Login de Comprador / Staff (HU-B2)
+      tags: [Auth]
+      summary: HU-B1 Registrar comprador
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
+            schema: { $ref: '#/components/schemas/RegisterBody' }
+      responses:
+        '201': { description: Cuenta creada con UUID y password bcrypt }
+        '400': { description: RUT/email/formato inválido }
+        '409': { description: Registro duplicado sin revelar campo }
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: HU-B2 Login comprador o administrativo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginBody' }
       responses:
         '200':
-          description: Login exitoso, se envía cookie JWT
+          description: JWT firmado RS256, 2h comprador o 12h administrativo
           headers:
             Set-Cookie:
-              schema:
-                type: string
-        '401':
-          description: Credenciales inválidas
-        '429':
-          description: Demasiados intentos
-  /logout:
+              description: jwt=...; HttpOnly; SameSite=Strict; Secure solo HTTPS producción
+              schema: { type: string }
+        '401': { description: Credenciales inválidas }
+        '403': { description: Primer inicio administrativo o rol sin acceso }
+        '429': { description: Límite de fallos de 15 minutos }
+  /api/auth/logout:
     post:
-      summary: Cierre de sesión (HU-B3)
+      tags: [Auth]
+      summary: HU-B3 Destruir cookie
       responses:
-        '200':
-          description: Cookie eliminada exitosamente
-  /admin/provision:
+        '200': { description: Cookie de sesión borrada }
+  /api/auth/provision:
     post:
-      summary: Provisión administrativa de cuentas (HU-B4)
+      tags: [Auth]
+      summary: HU-B4 Reflejar identidad STAFF/ORGANIZADOR ya creada en Keycloak
+      security: [{ internalKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
       responses:
-        '201':
-          description: Cuenta de staff creada (evento enviado a Notificaciones)
-  /recuperar-clave:
+        '201': { description: Espejo creado o ya existente, outbox programado si nuevo }
+        '400': { description: Perfil Keycloak incompleto }
+        '403': { description: x-api-key ausente o incorrecta }
+        '409': { description: Identidad duplicada }
+  /api/auth/provision/reenviar:
     post:
-      summary: Solicitar token de recuperación (HU-B5)
+      tags: [Auth]
+      summary: Reprogramar invitación pendiente
+      security: [{ internalKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
       responses:
-        '200':
-          description: Solicitud recibida (evento enviado a Notificaciones)
-  /identidad/{uuid}:
+        '200': { description: Invitación en outbox pendiente }
+        '403': { description: API Key incorrecta o cuenta no elegible }
+  /api/auth/recover:
+    post:
+      tags: [Auth]
+      summary: HU-B5 Solicitud genérica de recuperación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Confirmación genérica }
+  /api/auth/validar-token:
+    post:
+      tags: [Auth]
+      summary: Validar enlace temporal sin consumirlo
+      responses:
+        '200': { description: Token válido }
+        '401': { description: Token inválido, vencido o consumido }
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: HU-B5 Restablecer comprador y revocar sesiones
+      responses:
+        '200': { description: Nueva contraseña guardada y token_version incrementado }
+        '401': { description: Token inválido, vencido o consumido }
+  /api/auth/update-password:
+    post:
+      tags: [Auth]
+      summary: HU-B9 Activar cuenta administrativa en Keycloak
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenPasswordBody' }
+      responses:
+        '200': { description: Cuenta activada y evento publicado }
+        '401': { description: Token inválido o expirado }
+  /api/auth/cambiar-clave:
+    post:
+      tags: [Auth]
+      summary: Alias compatible HU-B9 de update-password
+      responses:
+        '200': { description: Contraseña administrativa actualizada }
+  /api/auth/validar-sesion:
     get:
-      summary: Consulta interna de identidad (HU-B6)
-      description: Endpoint exclusivo para uso interno (ej. Catálogo). Retorna información pública del usuario.
+      tags: [Auth]
+      summary: Comprobar sesión del navegador
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Sesión válida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResult' }
+        '401': { description: Sesión inválida }
+  /internal/validar-sesion:
+    get:
+      tags: [Interno]
+      summary: I1 - Introspección S2S (no exponer por Gateway público)
+      security: [{ sessionCookie: [], internalKey: [] }]
+      responses:
+        '200':
+          description: Identidad vigente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResult' }
+        '401': { description: Cookie inválida o ausente con x-api-key válida }
+        '403': { description: x-api-key incorrecta }
+        '500': { description: Error interno }
+  /internal/identidad/{uuid}:
+    get:
+      tags: [Interno]
+      summary: HU-B6 - Identidad mínima por UUID
+      security: [{ internalKey: [] }]
       parameters:
         - in: path
           name: uuid
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string, format: uuid }
       responses:
         '200':
-          description: Datos del usuario (rut, nombre, rol)
+          description: Solo RUT y nombre
           content:
             application/json:
               schema:
                 type: object
+                required: [rut, nombre]
                 properties:
-                  rut:
-                    type: string
-                  nombre:
-                    type: string
-                  rol:
-                    type: string
-        '401':
-          description: Acceso no autorizado desde red pública
-        '404':
-          description: Usuario no encontrado
+                  rut: { type: string }
+                  nombre: { type: string }
+        '403': { description: API Key inválida }
+        '404': { description: Cuenta no encontrada }
+  /api/auth/revoke-session:
+    post:
+      tags: [Administración operativa]
+      summary: HU-B8 Revocación de emergencia
+      security: [{ adminOperationKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_user_id, reason]
+              properties:
+                target_user_id: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        '200': { description: Versión JWT incrementada }
+        '403': { description: x-operations-key ausente o incorrecta }
+        '404': { description: UUID no existe }
   /.well-known/jwks.json:
     get:
-      summary: Endpoint público JWKS (HU-B7)
+      tags: [JWKS]
+      summary: HU-B7 Claves públicas vigentes y anterior en gracia
       responses:
-        '200':
-          description: Retorna la llave pública vigente
+        '200': { description: JWKS sin material privado }
+  /api/auth/.well-known/jwks.json:
+    get:
+      tags: [JWKS]
+      summary: Alias de JWKS accesible a través del Gateway
+      responses:
+        '200': { description: JWKS sin material privado }

@@ -3,6 +3,10 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule } from '@nestjs/microservices';
 import { AuthController } from './auth.controller';
+import { LoginAttemptService } from './login-attempt.service';
+import { JwksController } from './jwks.controller';
+import { RevocationController } from './revocation.controller';
+import { OperationsKeyGuard } from './operations-key.guard';
 import { KeycloakSyncService } from '../keycloak/keycloak-sync.service';
 import { StaffInvitationWorkerService } from './staff-invitation-worker.service';
 import { HttpModule } from '@nestjs/axios';
@@ -45,8 +49,8 @@ import { RABBITMQ_NOTIFICATIONS, buildAuthEventsClientOptions } from './messagin
       },
     ]),
   ],
-  controllers: [AuthController, NotificacionesListener],
-  providers: [AuthService, RsaKeyService, NotificationService, JwtStrategy, RolesGuard, KeycloakSyncService, StaffInvitationWorkerService],
+  controllers: [AuthController, NotificacionesListener, JwksController, RevocationController],
+  providers: [AuthService, RsaKeyService, NotificationService, JwtStrategy, RolesGuard, LoginAttemptService, OperationsKeyGuard, KeycloakSyncService, StaffInvitationWorkerService],
   exports: [AuthService, RsaKeyService],
 })
 export class AuthModule {}

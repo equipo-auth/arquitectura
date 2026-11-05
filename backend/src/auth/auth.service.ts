@@ -11,9 +11,15 @@ import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { assertValidRut, formatRut, normalizeRut } from '../common/rut';
 import { mapRolContrato } from './rol-contrato';
+import { RsaKeyService } from './rsa-key.service';
+import { ServiceUnavailableException } from '@nestjs/common';
+
+// Comparación bcrypt ficticia para minimizar la diferencia entre email inexistente y clave incorrecta.
+const DUMMY_HASH = bcrypt.hashSync('no-es-una-clave-real-de-usuario', 10);
 
 // HU-F3: roles con acceso al portal administrativo (/admin/login)
-export const ROLES_ADMINISTRATIVOS = ['ADMIN', 'ORGANIZADOR', 'STAFF'];
+// Acceso administrativo como nombre de portal, NO rol ADMIN.
+export const ROLES_ADMINISTRATIVOS = ['ORGANIZADOR', 'STAFF'];
 
 @Injectable()
 export class AuthService {
@@ -25,6 +31,7 @@ export class AuthService {
     private keycloakService: KeycloakService,
     private notificationService: NotificationService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly rsa?: RsaKeyService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -71,7 +78,21 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user || user.activo === false) throw genericError;
+    if (!user || user.activo === false) {
+      await bcrypt.compare(dto.password, DUMMY_HASH);
+      throw genericError;
+    }
+    // Únicos roles de TicketU; cualquier otro valor queda invalidado.
+    if (!['COMPRADOR', 'ORGANIZADOR', 'STAFF'].includes(user.rol)) throw genericError;
+
+    // HU-B2/HU-F3: el login público nunca autentica STAFF u ORGANIZADOR.
+    // admin=true es una indicación de flujo; NO representa un rol ADMIN.
+    // La cuenta administrativa se valida por Keycloak solo en su propio flujo.
+    if (dto.admin !== true && user.rol !== 'COMPRADOR') {
+      // Minimiza diferencias de tiempo frente a una contraseña incorrecta.
+      await bcrypt.compare(dto.password, DUMMY_HASH);
+      throw genericError;
+    }
 
     if (user.rol === 'COMPRADOR') {
       if (!user.password_hash) throw genericError;
@@ -82,6 +103,7 @@ export class AuthService {
       try {
         await this.keycloakService.validateUserCredentials(email, dto.password);
       } catch (error) {
+        if (error instanceof ServiceUnavailableException) throw error;
         if (error instanceof Error && error.message === 'resolve_required_actions') {
           this.logger.log(`Usuario administrativo requiere activar su cuenta: ${dto.email}`);
           return { requirePasswordChange: true, user };
@@ -114,7 +136,10 @@ export class AuthService {
       token_version: user.token_version,
     };
 
-    const token = this.jwtService.sign(payload, { expiresIn: `${expiresInHours}h` });
+    const token = this.jwtService.sign(payload, {
+      expiresIn: `${expiresInHours}h`,
+      keyid: this.rsa?.getCurrentKid(),
+    });
 
     this.logger.log(`Login exitoso, generando JWT para: ${dto.email}`);
     void this.audit?.record({ event: 'LOGIN_SUCCESS', outcome: 'SUCCESS', subjectUuid: user.uuid, detail: `rol=${user.rol}` });
@@ -193,6 +218,11 @@ export class AuthService {
     ]);
 
     void this.audit?.record({ event: 'STAFF_PASSWORD_ACTIVATED', outcome: 'SUCCESS', subjectUuid: resetRecord.user_uuid });
+    // HU-B9: se publica el hecho, nunca la contraseña ni el token del enlace.
+    void this.notificationService.sendStaffActivationNotice({
+      Id_usuario: resetRecord.user_uuid,
+      email_destino: resetRecord.user.email,
+    });
     return { message: 'Contraseña actualizada correctamente. Ya puede iniciar sesión.' };
   }
 

@@ -9,6 +9,20 @@ import styles from "./AuthPlaceholder.module.css";
 type Mode = "login" | "register";
 type FieldErrors = Record<string, string>;
 
+/** Pagos v1.5: solo redirecciones del mismo origen tras un login exitoso. */
+function destinoDespuesDelLogin(): string | null {
+  const raw = new URLSearchParams(window.location.search).get("volver");
+  if (!raw || raw.startsWith("//") || raw.startsWith("\\")) return null;
+  try {
+    const target = new URL(raw, window.location.origin);
+    if (target.origin !== window.location.origin) return null;
+    if (!(["http:", "https:"].includes(target.protocol))) return null;
+    return target.pathname + target.search + target.hash;
+  } catch {
+    return null;
+  }
+}
+
 export default function AuthPlaceholder() {
   const [mode, setMode] = useState<Mode>("login");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -91,10 +105,14 @@ export default function AuthPlaceholder() {
       const result = await loginBuyer({ email, password });
       form.reset();
       setErrors({});
+      const destino = destinoDespuesDelLogin();
       setMessage({
         kind: "success",
-        text: `Sesión iniciada correctamente${result.user?.nombre ? `, ${result.user.nombre}` : ""}.`,
+        text: destino
+          ? "Sesión iniciada correctamente. Te llevamos de vuelta…"
+          : `Sesión iniciada correctamente${result.user?.nombre ? `, ${result.user.nombre}` : ""}.`,
       });
+      if (destino) window.location.assign(destino);
     } catch (error) {
       if (error instanceof AuthApiError && error.status === 429) {
         setRateLimited(true);

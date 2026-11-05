@@ -25,7 +25,7 @@ export default function ProvisionForm() {
   useEffect(() => {
     getSession().then((session) => {
       if (!session) return router.replace("/admin/login");
-      setStatus(session.usuario.rol.toUpperCase() === "ADMIN" ? "allowed" : "denied");
+      setStatus("denied"); // Solo se provisiona manualmente desde la consola Keycloak; no existe rol ADMIN.
     }).catch(() => setStatus("denied"));
   }, [router]);
 
@@ -70,8 +70,8 @@ export default function ProvisionForm() {
           <div className={`${styles.alert} ${styles.alertSuccess}`} role="status">
             Cuenta {result.user.rol} sincronizada: {result.user.email} (UUID {result.user.uuid}).
             <ul className={styles.details}>
-              <li>Evento cuenta_staff: {result.notificacion.publicada ? "publicado" : "no publicado; solicitar reenvío interno"}</li>
-              <li>Invitación válida hasta: {new Date(result.notificacion.enlace_expira_en).toLocaleString("es-CL")}</li>
+              <li>Cuenta nueva: {result.creada ? "sí" : "no (ya existía)"}</li>
+              <li>Invitación: {result.invitacionProgramada ? "pendiente en outbox RabbitMQ" : "sin nueva invitación"}</li>
             </ul>
           </div>
         )}
