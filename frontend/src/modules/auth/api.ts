@@ -131,7 +131,7 @@ export async function loginBuyer(payload: LoginPayload) {
   // la cookie HttpOnly entregada por el backend gracias a credentials: include.
   return response.json() as Promise<{
     message: string;
-    user: AuthUser;
+    user?: AuthUser;
   }>;
 }
 
@@ -161,7 +161,6 @@ export type ProvisionPayload = {
 };
 
 export type ProvisionResult = {
-  message: string;
   user: {
     uuid: string;
     email: string;
@@ -170,11 +169,8 @@ export type ProvisionResult = {
     rol: string;
     creado_por_id: string | null;
   };
-  notificacion: {
-    evento: string;
-    publicada: boolean;
-    enlace_expira_en: string;
-  };
+  creada: boolean;
+  invitacionProgramada: boolean;
 };
 
 const GENERIC_LINK_ERROR = "El enlace no es válido. Solicita uno nuevo.";

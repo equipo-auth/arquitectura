@@ -239,3 +239,91 @@ Para probar I2, crea un STAFF real en Keycloak, verifica su espejo en Prisma Stu
 ### 8. Límites de la validación
 
 Esta guía se realizó por inspección de GitHub. No se ejecutaron contenedores Docker, base de datos ni servicios remotos desde este entorno. Los puertos y topología están verificados en los `docker-compose.yml` citados, pero el estado de red y las pruebas de ejecución necesitan la máquina de integración.
+
+## Guía de historias e integración Auth (2026)
+
+> Esta sección complementa el README inicial. **No despliega ni modifica otros módulos**. Historial de historias: `../HISTORIAS.md`; contrato de introspección: `../CONTRATO_INTEGRACION_AUTH.md`.
+
+### Requisitos y puertos, sin reasignaciones
+
+- Auth NestJS: **10000** (nativo con `npm run start:dev`).
+- PostgreSQL: **5433** en el host, **5432** dentro de su contenedor.
+- Keycloak: **8081** en el host, **8080** dentro del contenedor.
+- Frontend Auth: **3001** (con `npm run dev -- -p 3001`).
+- Gateway oficial FWizav: **8080**; RabbitMQ oficial: **5672** y administración **15672**.
+- No ejecutar el `rabbitmq` de `backend/docker-compose.yml` **al mismo tiempo** que el RabbitMQ oficial: colisionan en puertos/nombre de contenedor.
+
+### Arranque de desarrollo SOLO Auth
+
+Desde `backend/`:
+
+```bash
+cp .env.example .env   # Solo la primera vez; no sobrescribir configuración propia
+# Configurar DATABASE_URL localhost:5433, KEYCLOAK_URL localhost:8081,
+# KEYCLOAK_CLIENT_SECRET, INTERNAL_API_KEY y RABBITMQ_URL reales.
+docker compose up -d db keycloak
+npm ci
+npx prisma generate
+npx prisma db push
+npm run start:dev
+```
+
+**JWT RS256** requiere `backend/private.pem` y `backend/public.pem` existentes y correspondientes. Si NO hay llaves que preservar (instalación nueva local):
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+chmod 600 private.pem
+```
+
+**No reemplazar las llaves existentes**: invalidaría todas las sesiones anteriores. Las llaves no se suben a Git. Verificar el realm `ticketu-realm`, client `ticketu-backend`, credenciales y usuarios Keycloak antes de probar STAFF.
+
+El servidor HTTP inicia tras la conexión del listener a RabbitMQ. Para el flujo de invitaciones se necesita el broker real accesible mediante `RABBITMQ_URL`. El gateway no es necesario para los unit tests de Auth.
+
+### RabbitMQ oficial de FWizav, sin contenedores duplicados
+
+```bash
+# En el repositorio FWizav/backendticketU:
+docker network inspect plataforma-eventos-net >/dev/null 2>&1 || docker network create plataforma-eventos-net
+cd event-broker
+cp .env.example .env   # Solo si no existe
+# Mantener los puertos oficiales y credenciales que acordaron los equipos.
+docker compose up -d --build
+```
+
+Comprobar el vhost `ticketu` en `http://localhost:15672` y crear/verificar la topología específica de Auth: `auth.events` (topic), `notificaciones.events` (topic), cola `auth.correo_auth` (durable), binding `notificaciones.events` → `auth.correo_auth` con `correo_auth`. El broker oficial no crea automáticamente todos los bindings de Auth. La cola consumidora de Notificaciones para `cuenta_staff` debe pertenecer a Notificaciones (no inventarla en Auth). No utilizar `backend/tools/simular-notificaciones-local.js` como evidencia CA1 de integración real.
+
+### Endpoints de las historias, sin alterar contratos existentes
+
+| Historia | Ruta | Seguridad/nota |
+|---|---|---|
+| B1 | `POST /api/auth/register` | Comprador en PostgreSQL; bcrypt y UUID |
+| B2 | `POST /api/auth/login` | JWT RS256 cookie HttpOnly; comprador 2 h, staff 12 h; 5/3 fallos en 15 min |
+| B3 | `POST /api/auth/logout` | Destruye cookie |
+| B4 | `POST /api/auth/provision`, `/provision/reenviar` | **Solo para uso interno**, `x-api-key`; Keycloak-first + outbox |
+| B5 | `POST /api/auth/recover`, `/validar-token`, `/reset-password` | Token SHA-256, un solo uso; `token_version` aumenta |
+| B6 contrato actual | `GET /internal/validar-sesion` | Cookie `jwt` + `x-api-key`, JSON `valido/usuario` |
+| B6 identidad histórica | `GET /internal/identidad/:uuid` | Solo `x-api-key`, JSON **únicamente** `{rut,nombre}` |
+| B7 | `GET /.well-known/jwks.json` | JWK pública, sin credenciales; alias `/api/auth/.well-known/jwks.json` para Gateway |
+| B8 | `POST /api/auth/revoke-session` | `x-operations-key` exclusivamente servidor-servidor; `{target_user_id,reason}` |
+| B9 | `POST /api/auth/update-password` | Alias `/api/auth/cambiar-clave` con token de invitación; Keycloak |
+
+**Roles acordados:** `COMPRADOR`, `ORGANIZADOR`, `STAFF` y ninguno más. El operador de Keycloak no tiene rol en Auth. B4 se ejecuta desde Keycloak y se sincroniza a PostgreSQL; B8 es un mantenimiento servidor-servidor con `AUTH_OPERATIONS_KEY` y `x-operations-key` (credencial de infraestructura, no rol). No enviar claves internas desde el navegador. La ruta `/admin/provision` permanece deshabilitada.
+
+### JWKS / rotación de claves
+
+El JWT nuevo incorpora `kid` en la cabecera, **no** en el payload (que conserva `sub`, `rol`, `token_version`, `iat`, `exp`). Para rotación controlada, conservar únicamente la **clave pública** anterior como `previous-public.pem`, instalar `private.pem/public.pem` nuevos y reiniciar el backend. La clave pública anterior queda disponible `JWT_KEY_GRACE_HOURS` (por defecto 24 horas) desde la fecha de modificación de `previous-public.pem`. Una vez terminada la gracia, eliminar ese archivo. Nunca publicar `private.pem` ni agregarlo a Dockerfile/imágenes.
+
+### Pruebas y evidencias
+
+```bash
+npm run build
+npm test -- --runInBand
+npm run test:e2e -- --runInBand
+# Con NestJS, PostgreSQL, Keycloak y RabbitMQ REALES levantados:
+INTERNAL_API_KEY='CLAVE_REAL_LOCAL' ./tools/probar-auth-real.sh
+```
+
+Los tests Jest son mayormente unitarios y varios e2e usan `PrismaService` mock: **no equivalen a una integración con servicios reales**. Para CA1 ejecutar además `docs/postman_historias_auth.json`, usar identidades de prueba reales y guardar capturas de HTTP 200/201/401/403/404/429, `Set-Cookie`, Prisma Studio y broker. No guardar JWT, claves ni URLs temporales en Git ni en capturas públicas.
+
+La especificación asíncrona está en `docs/asyncapi-auth.yaml`. La OpenAPI ejecutable vigente es Swagger en `http://localhost:10000/api/auth/docs`; `docs/swagger.yaml` se actualiza con las rutas HTTP actuales; contrastar cualquier cambio posterior con Swagger dinámico.

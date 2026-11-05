@@ -336,3 +336,39 @@ Con comprador real, el login debería llevar a `/pagos`. Pruebas negativas: `?vo
 - **Pagos:** todavía no se proporcionó su repositorio propio; no es posible comprobar su implementación real.
 - **Notificaciones:** el repositorio dado no contiene consumidor RabbitMQ ejecutable verificable; no se puede afirmar que haya correo realmente entregado.
 - **Gateway FWizav:** expone 8080 y conserva los prefijos `/api/<modulo>/*` sin reescritura; no publica `/internal/*`.
+
+## Guía de historias e integración Auth (2026)
+
+### Ejecutar frontend auténtico (sin mocks)
+
+El puerto del frontend Auth es **3001**, backend Auth **10000**, Gateway oficial **8080**. En `frontend/`:
+
+```bash
+cp .env.example .env.local  # Solo primera vez; no sobrescribir variables locales
+# NEXT_PUBLIC_AUTH_API_URL=http://localhost:10000
+# NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
+npm ci
+npm run test
+npm run build
+npm run dev -- -p 3001
+```
+
+Abrir `http://localhost:3001/auth` (compradores) o `http://localhost:3001/admin/login` (STAFF/ORGANIZADOR). `http://localhost:3001/crear-clave?token=...` requiere token auténtico generado por el worker de Auth tras crear el usuario en Keycloak. No sirve una contraseña improvisada en PostgreSQL para STAFF.
+
+### Flujos de las historias
+
+- **F1** Registro: el frontend valida email/RUT y contraseña >=8 antes de enviar; backend también valida y guarda bcrypt. En HTTP local solo usar localhost; para producción HTTPS.
+- **F2** Login: recibe cookie `jwt` HttpOnly, no la lee en JavaScript. En error 401 muestra `Credenciales inválidas`; 429 bloquea envío.
+- **F2 / Pagos v1.5** `?volver=`: `http://localhost:3001/auth?volver=%2Fpagos` retorna a `/pagos` tras login. URLs `javascript:`, `//dominio` u otro origen son rechazadas. **Una URL de otro puerto no es Same-Origin**; para dominios/orígenes distintos se necesita un proxy/ruta acordada, no desactivar la validación.
+- **F3** Acceso administrativo: `/admin/login` requiere Keycloak para STAFF/ORGANIZADOR; se consulta el perfil con cookie antes de autorizar redirección. Solo existen roles COMPRADOR, ORGANIZADOR y STAFF; `admin: true` marca la ruta de ingreso del personal, no un cuarto rol. El operador usa la consola Keycloak; `/admin/provision` permanece deshabilitado.
+- **F4** Recuperación: `/recuperar` respuesta genérica; `/restablecer` para COMPRADOR; `/crear-clave` para STAFF/ORGANIZADOR. Los tokens tienen un solo uso, se eliminan de la barra de direcciones y cambian `token_version`.
+
+### Verificación rápida manual
+
+1. Registrar un comprador real y comprobar registro 201, duplicado 409.
+2. Login correcto y comprobar cookie `jwt` HttpOnly; contraseña mala devuelve 401, sexto fallo en 15 min devuelve 429 (administrativo cuarto).
+3. Iniciar sesión desde `/auth?volver=%2Fpagos` y confirmar regreso a la misma página. Probar `?volver=https%3A%2F%2Fejemplo.org` y verificar que no redirige.
+4. Solicitar recuperación; sin Notificaciones real NO llegará correo (no simular aprobación).
+5. Validar token de invitación, crear contraseña y volver a iniciar sesión con Keycloak.
+
+No hardcodear claves internas `INTERNAL_API_KEY` o `AUTH_OPERATIONS_KEY` en frontend, ni ponerlas en variables `NEXT_PUBLIC_*`.

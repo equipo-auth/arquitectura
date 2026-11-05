@@ -35,7 +35,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([extractJwtFromCookie]),
       ignoreExpiration: false,
-      secretOrKey: rsaKeyService.getPublicKey(),
+      secretOrKeyProvider: (_request, rawJwt, done) => {
+        try { done(null, rsaKeyService.selectPublicKey(rawJwt)); }
+        catch (error) { done(error as Error); }
+      },
       algorithms: ['RS256'],
     });
   }
@@ -61,6 +64,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (!user || user.activo === false) {
       throw new UnauthorizedException('El usuario no existe o fue deshabilitado');
+    }
+
+    // Rechazar explícitamente roles fuera del contrato de tres perfiles.
+    if (!['COMPRADOR', 'ORGANIZADOR', 'STAFF'].includes(user.rol)) {
+      throw new UnauthorizedException('Rol no reconocido');
     }
 
     // Una cuenta administrativa sin activación completa no puede operar con JWT.

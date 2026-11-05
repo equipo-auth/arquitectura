@@ -8,6 +8,9 @@ import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth } from '@nestjs/swagger';
 import { InternalApiKeyGuard } from '../common/internal-api-key.guard';
+import { SkipThrottle } from '@nestjs/throttler';
+import { LoginAttemptService } from './login-attempt.service';
+import { Optional } from '@nestjs/common';
 
 export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest(err: any, user: any, info: any) {
@@ -22,7 +25,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 @ApiTags('Autenticación')
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Optional() private readonly loginAttempts?: LoginAttemptService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'HU-B1: Registrar nuevo usuario' })
@@ -33,14 +39,27 @@ export class AuthController {
   }
 
   @Post('login')
+  @SkipThrottle() // HU-B2: el límite de fallos lo aplica LoginAttemptService
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'HU-B2: Iniciar sesión y emitir JWT RS256' })
   @ApiResponse({ status: 200, description: 'Login exitoso. Payload con sub, rol y token_version enviado en cookie HttpOnly, Secure, SameSite=Strict.' })
   @ApiResponse({ status: 401, description: 'Prevención de descubrimiento: Email inexistente o contraseña incorrecta.' })
   @ApiResponse({ status: 403, description: 'Intercepción: primer_inicio=true (UPDATE_PASSWORD en Keycloak), o rol sin acceso al portal administrativo cuando admin=true.' })
   @ApiResponse({ status: 429, description: 'Bloqueo por demasiados intentos fallidos.' })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response, @Req() req?: Request) {
+    const ip = req?.ip || 'ip-desconocida';
+    const admin = dto.admin === true;
+    this.loginAttempts?.assertAllowed(dto.email, ip, admin);
+    let result: Awaited<ReturnType<AuthService['login']>>;
+    try {
+      result = await this.authService.login(dto);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        this.loginAttempts?.recordFailure(dto.email, ip, admin);
+      }
+      throw error;
+    }
+    this.loginAttempts?.clear(dto.email, ip, admin);
 
     if (result.requirePasswordChange) {
       // No emitir un token de cambio de clave desde un login fallido.
@@ -64,7 +83,7 @@ export class AuthController {
     return { message: 'Inicio de sesión exitoso' };
   }
 
-  @Post('update-password')
+  @Post(['update-password', 'cambiar-clave']) // Alias HU-B9, sin romper /update-password
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Completar cambio obligatorio de contraseña (Flujo Interceptado)' })
   @ApiResponse({ status: 200, description: 'Clave actualizada en Keycloak y base de datos.' })

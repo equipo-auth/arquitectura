@@ -12,7 +12,7 @@ export default function CrearClaveForm() {
       description="Define la contraseña con la que ingresarás al sistema de gestión."
       submitLabel="Guardar contraseña"
       successText="Tu contraseña fue creada. Ya puedes iniciar sesión."
-      loginHref="/admin/login"
+      loginHref={process.env.NEXT_PUBLIC_ADMIN_LOGIN_URL || "/admin/login"}
       onSubmit={setInitialPassword}
     />
   );

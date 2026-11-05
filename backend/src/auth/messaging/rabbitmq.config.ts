@@ -14,6 +14,7 @@ export const RABBITMQ_NOTIFICATIONS = 'RABBITMQ_NOTIFICATIONS';
 export const AUTH_EVENTS = {
   RECUPERACION_CUENTA: 'recuperacion_cuenta',
   CUENTA_STAFF: 'cuenta_staff',
+  STAFF_PRIMER_INICIO_COMPLETADO: 'auth.staff.primer_inicio_completado',
 } as const;
 
 /** Routing keys consumidas por Auth */
