@@ -1,0 +1,33 @@
+# Mantis — reportar defectos de la implementación docente
+
+Mantis lleva **defectos reales**, no «pruebas aprobadas». **No hay defectos creados o verificados por este paquete**. Si una cuenta está vacía puede ser por proyecto o permisos, no necesariamente porque el sistema no tenga defectos.
+
+## Antes de levantar una incidencia
+
+1. Confirmar estado del ambiente `https://pruebasdesistemauv.com/ticketu/api/health`.
+2. Validar que la solicitud cumple Swagger (nombres JSON, estado de cuenta, autorización).
+3. Reproducir con datos **propios**; guardar fecha, pasos, código HTTP y `x-request-id`.
+4. Comparar con criterio de historia: si el caso de prueba esperaba otra regla, corregir el caso en TestLink; si el sistema incumple criterio, registrar Mantis.
+5. No pegar contraseñas, tokens JWT ni emails de otros usuarios.
+
+## Plantilla
+
+**Proyecto:** TicketU (seleccionar proyecto habilitado por el docente)
+
+**Título:** `[HU-AUTH-XX] Función — Desviación observada`
+
+- **Historia / Caso TestLink:** ...
+- **Entorno:** pruebasdesistemauv.com/ticketu
+- **Build/versión y fecha:** ...
+- **Precondiciones:** ...
+- **Pasos para reproducir:** 1. ... 2. ... 3. ...
+- **Datos de prueba (sin secretos):** ...
+- **Resultado esperado según PDF:** ...
+- **Resultado real + HTTP + respuesta saneada:** ...
+- **x-request-id:** ...
+- **Reproducibilidad:** ...
+- **Severidad y prioridad:** según opciones de Mantis del curso
+- **Evidencias:** capturas o logs sin secretos
+- **Enlace al caso y a la ejecución TestLink:** ...
+
+Si aún no ejecutaste casos, «0 defectos reportados» **no demuestra** que todo funciona. Solicita al docente permiso de creación o acceso al proyecto cuando corresponda. La guía prohíbe el uso no autorizado de la cuenta admin y pruebas de carga no coordinadas.
