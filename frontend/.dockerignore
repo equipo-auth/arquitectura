@@ -1,0 +1,19 @@
+# Evitar copiar gigabytes, archivos locales y secretos al contexto Docker.
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+*.pem
+*.key
+*.bak
+*.antes-parche.bak
+*.log
+*.zip
+coverage
+test-results
+playwright-report
+.vscode
+.idea
+.DS_Store

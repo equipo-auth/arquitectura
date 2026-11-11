@@ -13,7 +13,11 @@
 
 services:
   front:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_GATEWAY_URL: ${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+        NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://localhost:8080}
     ports:
       - "3001:3000"
     environment:

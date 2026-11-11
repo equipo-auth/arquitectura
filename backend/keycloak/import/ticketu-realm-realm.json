@@ -1,0 +1,29 @@
+{
+  "realm": "ticketu-realm",
+  "enabled": true,
+  "displayName": "TITEC / TicketU",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "STAFF" },
+      { "name": "ORGANIZADOR" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ticketu-backend",
+      "name": "Auth NestJS TITEC",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ]
+}

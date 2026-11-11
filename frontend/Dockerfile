@@ -8,11 +8,20 @@
 # ---- Etapa 1: dependencias + build ----
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Next.js incorpora las NEXT_PUBLIC_* en tiempo de build.
+# Valor por defecto: Gateway; los scripts locales eligen Auth directo.
+ARG NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
+ARG NEXT_PUBLIC_AUTH_API_URL=http://localhost:8080
+ENV NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL}
+ENV NEXT_PUBLIC_AUTH_API_URL=${NEXT_PUBLIC_AUTH_API_URL}
 
 COPY package*.json ./
 RUN npm install
 
 COPY . .
+# La carpeta public/ es opcional en Next.js. El runner la copia, por eso
+# garantizamos que exista incluso cuando el repo no tenga assets publicos.
+RUN mkdir -p public
 RUN npm run build
 
 # ---- Etapa 2: imagen final, solo lo necesario para correr ----
