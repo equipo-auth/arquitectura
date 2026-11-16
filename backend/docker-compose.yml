@@ -11,20 +11,28 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+      - plataforma-eventos-net
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.1
     container_name: ticketu-keycloak
-    command: start-dev
+    command: ["start-dev", "--import-realm"]
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Falta KEYCLOAK_ADMIN_PASSWORD en backend/.env}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Falta KEYCLOAK_CLIENT_SECRET en backend/.env}
     ports:
       - "8081:8080"
     # Para instalaciones nuevas. IMPORTANTE: si ya tienes realm/usuarios
     # en contenedor SIN volumen, exporta antes de recrearlo (ver GUIA).
     volumes:
       - keycloak_data:/opt/keycloak/data
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+    networks:
+      - default
+      - plataforma-eventos-net
 
   rabbitmq:
     image: rabbitmq:3-management

@@ -1,5 +1,17 @@
 
 # Etapa 1: instalar dependencias y compilar NestJS
+# Prisma solo para inicializacion de instalaciones nuevas (perfil setup).
+# NO se ejecuta automaticamente sobre bases de datos existentes.
+FROM node:22-bookworm-slim AS prisma-setup
+WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci && npx prisma generate
+CMD ["npx", "prisma", "db", "push"]
+
 FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app

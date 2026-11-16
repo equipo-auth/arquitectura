@@ -42,6 +42,21 @@ services:
       timeout: 3s
       retries: 8
 
+  # Inicializacion OPCIONAL de esquema: solo ejecutar con `run --rm prisma-init`.
+  # No se inicia automaticamente al hacer up de auth-service.
+  prisma-init:
+    profiles: ["setup"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prisma-setup
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
+    networks:
+      - plataforma-eventos-net
+
 networks:
   plataforma-eventos-net:
     external: true
