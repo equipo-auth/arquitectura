@@ -57,6 +57,26 @@ services:
     networks:
       - plataforma-eventos-net
 
+  # Solo se ejecuta mediante: docker compose --profile qa run --rm qa-seed
+  # NO crea cuentas cuando alguien ejecuta docker compose up normal.
+  qa-seed:
+    profiles: ["qa"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prisma-setup
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
+      KEYCLOAK_URL: "http://ticketu-keycloak:8080"
+      QA_AUTH_URL: "http://ticketu-auth-service:10000"
+      QA_SEED_ALLOW: "${QA_SEED_ALLOW:-NO}"
+      QA_SEED_PASSWORD: "${QA_SEED_PASSWORD:-}"
+    command: ["node", "tools/crear-usuarios-qa.cjs"]
+    networks:
+      - plataforma-eventos-net
+
 networks:
   plataforma-eventos-net:
     external: true
