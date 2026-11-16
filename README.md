@@ -25,6 +25,23 @@ La estructura principal del repositorio es:
 | `CONTRATO_INTEGRACION_AUTH.md` | Contrato HTTP de introspección con otros servicios |
 | `CONTRATO_NOTIFICACIONES_AUTH.md` | Contrato de eventos con Notificaciones |
 
+## Cuentas QA de desarrollo (contraseña pública de prueba)
+
+**Solo para Docker local y datos ficticios.** Las nueve cuentas utilizan la misma contraseña
+predeterminada: **`TicketuQA2026!`**. Son identidades de prueba, no credenciales
+internas del sistema. No reutilizar esta clave en usuarios reales ni entornos públicos.
+
+| Rol | Correos de prueba | Contraseña |
+|---|---|---|
+| COMPRADOR | `comprador1@ticketu.test`, `comprador2@ticketu.test`, `comprador3@ticketu.test` | `TicketuQA2026!` |
+| STAFF | `staff1@ticketu.test`, `staff2@ticketu.test`, `staff3@ticketu.test` | `TicketuQA2026!` |
+| ORGANIZADOR | `organizador1@ticketu.test`, `organizador2@ticketu.test`, `organizador3@ticketu.test` | `TicketuQA2026!` |
+
+Las cuentas no se almacenan en Git: se crean en PostgreSQL y Keycloak mediante el seed
+**manual**, descrito en [backend/README.md](backend/README.md). Si ya fueron creadas
+con otra contraseña, ejecutar nuevamente el seed QA actualiza **solo** esas nueve
+contraseñas e invalida sus sesiones previas.
+
 ## Estado de comprobación local — 16/11/2026
 
 En el entorno Docker de desarrollo se comprobó:
@@ -48,4 +65,4 @@ Estas pruebas **no** acreditan todavía entrega real de correos ni integración 
 
 ## Seguridad de desarrollo
 
-No subir archivos `.env`, llaves `*.pem`, contraseñas ni cookies JWT. Se utiliza **una clave interna compartida por entorno** entre los backends autorizados; no se necesitan claves individuales por microservicio. Las credenciales de desarrollo no deben reutilizarse en producción ni exponerse a Internet.
+No subir archivos `.env`, llaves `*.pem`, contraseñas **reales** ni cookies JWT. La única excepción documentada es la contraseña pública de las nueve cuentas ficticias `@ticketu.test` de desarrollo local. Se utiliza **una clave interna compartida por entorno** entre los backends autorizados; no se necesitan claves individuales por microservicio. Las credenciales de desarrollo no deben reutilizarse en producción ni exponerse a Internet.

@@ -72,7 +72,6 @@ services:
       KEYCLOAK_URL: "http://ticketu-keycloak:8080"
       QA_AUTH_URL: "http://ticketu-auth-service:10000"
       QA_SEED_ALLOW: "${QA_SEED_ALLOW:-NO}"
-      QA_SEED_PASSWORD: "${QA_SEED_PASSWORD:-}"
     command: ["node", "tools/crear-usuarios-qa.cjs"]
     networks:
       - plataforma-eventos-net

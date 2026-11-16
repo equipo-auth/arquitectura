@@ -3,7 +3,7 @@
  * Cuentas de integración QA, OPCIONALES y SOLO en Docker de desarrollo.
  * Compradores: Prisma PostgreSQL. STAFF y ORGANIZADOR: Keycloak Admin API,
  *   /api/auth/provision para espejo UUID y, SOLO en QA, activación sin invitación.
- * Requiere QA_SEED_ALLOW=SI y QA_SEED_PASSWORD (nunca guardar en Git).
+ * Requiere QA_SEED_ALLOW=SI; la contraseña pública de QA es SOLO de demostración.
  */
 'use strict';
 const path = require('node:path');
@@ -11,7 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env'), override: false });
 
-const pass = process.env.QA_SEED_PASSWORD || '';
+const pass = 'TicketuQA2026!'; // SOLO cuentas @ticketu.test en Docker local
 const realm = process.env.KEYCLOAK_REALM || 'ticketu-realm';
 const kcBase = (process.env.KEYCLOAK_URL || 'http://localhost:8081').replace(/\/+$/, '');
 const authBase = (process.env.QA_AUTH_URL || 'http://localhost:10000').replace(/\/+$/, '');
@@ -170,7 +170,7 @@ async function main() {
   exigir(process.env.QA_SEED_ALLOW === 'SI', 'Acción deliberada requerida: QA_SEED_ALLOW=SI');
   exigir(process.env.NODE_ENV === 'development', 'Solo se permite NODE_ENV=development; prohibido en producción');
   exigir(pass.length >= 12 && /[a-zA-Z]/.test(pass) && /[0-9]/.test(pass),
-    'QA_SEED_PASSWORD debe tener 12+ caracteres con letras y dígitos');
+    'La contraseña de demostración QA debe tener 12+ caracteres con letras y dígitos');
   exigir(dbUrl && bdAprobada(dbUrl), 'DATABASE_URL debe ser la BD local Docker QA');
   exigir(hostAprobado(kcBase,['localhost','127.0.0.1','ticketu-keycloak']), 'Keycloak debe ser el de Docker QA local');
   exigir(hostAprobado(authBase,['localhost','127.0.0.1','ticketu-auth-service']), 'Auth debe ser local Docker QA');

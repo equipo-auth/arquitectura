@@ -183,42 +183,66 @@ docker exec ticketu-rabbitmq rabbitmqctl list_bindings -p ticketu
 
 En la comprobación del 16/11/2026 se observaron `auth.events`, `notificaciones.events`, el binding entrante `correo_auth` y las colas de **QA** `qa.auth.staff` y `qa.auth.recuperacion`. Estas últimas **no son prueba de que el consumidor real de Notificaciones esté ejecutándose**. Un evento publicado en RabbitMQ tampoco demuestra que el correo llegó a su destinatario.
 
-## 5. QA — nueve usuarios reales
+## 5. QA — nueve cuentas de desarrollo con credenciales conocidas
 
-El 16/11/2026 se probó en el entorno Docker de desarrollo: **9/9 logins HTTP 200**, cookie JWT recibida, introspección HTTP 200 y rol correcto. Los usuarios están en la BD local y en Keycloak, **no** en Git ni en la imagen Docker.
+El 16/11/2026 se probaron **9/9 logins HTTP 200**, cookie JWT e introspección HTTP 200.
+**Ese resultado corresponde a la contraseña usada durante el seed anterior.** Para que
+los demás equipos puedan reproducirlo en su Docker, el seed actual establece la clave
+pública fija **`TicketuQA2026!`**, solamente para las nueve cuentas `@ticketu.test`.
 
-| Cuentas de prueba | Cantidad | Rol contractual |
-|---|---:|---|
-| `comprador1@ticketu.test` a `comprador3@ticketu.test` | 3 | `usuario` |
-| `staff1@ticketu.test` a `staff3@ticketu.test` | 3 | `staff` |
-| `organizador1@ticketu.test` a `organizador3@ticketu.test` | 3 | `organizador` |
+| Correo electrónico | Rol de Auth | Contraseña de prueba |
+|---|---|---|
+| `comprador1@ticketu.test` | COMPRADOR (`usuario`) | `TicketuQA2026!` |
+| `comprador2@ticketu.test` | COMPRADOR (`usuario`) | `TicketuQA2026!` |
+| `comprador3@ticketu.test` | COMPRADOR (`usuario`) | `TicketuQA2026!` |
+| `staff1@ticketu.test` | STAFF (`staff`) | `TicketuQA2026!` |
+| `staff2@ticketu.test` | STAFF (`staff`) | `TicketuQA2026!` |
+| `staff3@ticketu.test` | STAFF (`staff`) | `TicketuQA2026!` |
+| `organizador1@ticketu.test` | ORGANIZADOR (`organizador`) | `TicketuQA2026!` |
+| `organizador2@ticketu.test` | ORGANIZADOR (`organizador`) | `TicketuQA2026!` |
+| `organizador3@ticketu.test` | ORGANIZADOR (`organizador`) | `TicketuQA2026!` |
 
-Los nueve usuarios QA fueron creados con **una contraseña común que se pidió de forma oculta en consola**. No se registra la contraseña en el repositorio. Si se despliega en otro equipo, primero se deben crear las identidades de prueba en sus bases correspondientes usando el seed QA preparado para ese entorno. No suponer que están presentes al clonar.
+La contraseña está deliberadamente en texto plano **solo en el código y la documentación
+QA**. En PostgreSQL se guarda el hash bcrypt para compradores; STAFF y ORGANIZADOR
+mantienen la credencial en Keycloak. No se altera `INTERNAL_API_KEY`, secretos de Keycloak,
+RabbitMQ ni usuarios externos a estas nueve identidades. **No usar este seed en producción**
+ni publicar servicios de desarrollo con estas cuentas accesibles desde Internet.
 
-### Crear los nueve usuarios en un Docker nuevo
+### Crear o actualizar las nueve cuentas en Docker
 
-Para reproducir el seed es **necesario subir también** `backend/tools/crear-usuarios-qa.cjs`, la definición del servicio `qa-seed` en `backend/docker-compose.auth-service.yml` **y el `backend/Dockerfile`** con la etapa que incorpora la herramienta de seed. Son archivos de código/configuración del entorno local donde ya funcionó el seed: no contienen datos ni contraseñas de la BD.
+Requisitos: PostgreSQL, Keycloak con `ticketu-realm`, RabbitMQ y Auth ya levantados, con
+`backend/.env` configurado. El perfil `qa-seed` requiere los archivos
+`backend/tools/crear-usuarios-qa.cjs`, `backend/docker-compose.auth-service.yml` y
+la etapa `prisma-setup` del `backend/Dockerfile`.
 
-Con la infraestructura de PostgreSQL, Keycloak (realm `ticketu-realm`), RabbitMQ y Auth levantada, desde `backend/`:
+Desde la raíz del repositorio:
 
 ```bash
+cd backend
 docker compose -f docker-compose.auth-service.yml --profile qa config --services | grep -Fx qa-seed
-# Contraseña común de prueba introducida ocultamente; mínimo 12 caracteres, letras y números.
-read -r -s -p "Contraseña QA: " QA_PASS; echo
-QA_SEED_ALLOW=SI QA_SEED_PASSWORD="$QA_PASS" \
-  docker compose -f docker-compose.auth-service.yml --profile qa run --rm --build qa-seed
-unset QA_PASS
+QA_SEED_ALLOW=SI docker compose -f docker-compose.auth-service.yml \
+  --profile qa run --rm --build qa-seed
 ```
 
-El servicio QA configura los tres compradores en PostgreSQL y los seis usuarios de personal en Keycloak y su espejo de Auth. No es automático durante `docker compose up`; cada compañero debe ejecutar este paso explícitamente en su propia instalación. No guardar la contraseña en el repositorio ni publicar el entorno con usuarios de prueba.
+El seed **no se ejecuta automáticamente** al hacer `docker compose up`; hay que invocarlo
+explícitamente. Si ya tenías estas nueve cuentas con una contraseña anterior, volver a
+correr el seed **restablece su clave a `TicketuQA2026!`** e incrementa `token_version`,
+invalidando las sesiones anteriores. No elimina volúmenes ni altera otras cuentas.
 
-Con Auth, Keycloak, PostgreSQL y Gateway levantados, desde la raíz del repositorio:
+### Verificar las nueve cuentas sin solicitar contraseña
+
+Con Auth, Keycloak, PostgreSQL y el Gateway funcionando, desde la raíz del repositorio:
 
 ```bash
 python3 backend/tools/probar-9-usuarios-qa.py
 ```
 
-El comprobador pide la contraseña de QA sin mostrarla, llama a `/api/auth/login` por el Gateway y a `/internal/validar-sesion` por Auth. No crea usuarios, no cambia claves ni guarda tokens en archivos. Requiere acceso local a Docker para leer en memoria la `INTERNAL_API_KEY` del contenedor Auth. Resultado esperado **si los nueve usuarios existen y la contraseña corresponde**: `9/9`.
+El comprobador usa `TicketuQA2026!` desde el código, inicia sesión por
+`http://localhost:8080/api/auth/login` y valida cada cookie JWT y perfil mediante
+`http://localhost:10000/internal/validar-sesion`. Lee la `INTERNAL_API_KEY` del
+contenedor Auth sin imprimirla. No modifica usuarios, contraseñas ni archivos de datos.
+
+Resultado esperado **una vez reejecutado el seed con la contraseña fija**: `9/9`.
 
 ### Tests del proyecto
 
