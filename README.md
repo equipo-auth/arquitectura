@@ -1,63 +1,51 @@
+# TITEC / TicketU — Microservicio de Autenticación
 
-# TITEC Auth — sincronización AUTOMÁTICA desde Keycloak
+Microservicio Auth del proyecto TITEC. Gestiona el registro y las sesiones de compradores, así como la autenticación de personal de organización. Está desarrollado con **NestJS, Prisma/PostgreSQL, Keycloak y RabbitMQ**; el frontend del equipo utiliza **Next.js**.
 
-- Compradores: registro y recuperación por PostgreSQL (bcrypt).
-- Staff/Organizador: creación manual SOLO en Keycloak, sincronización periódica
-  desde NestJS, UUID idéntico en PostgreSQL, invitación por RabbitMQ.
-- NO hay un segundo administrador de provisión en PostgreSQL.
-- Nunca ejecuta `ensureStaffUser()` ni crea usuarios en Keycloak.
-- El campo `password_hash` en Auth PostgreSQL es nulo para Staff; la
-  credencial de Staff se conserva en el almacén de Keycloak.
+## Arquitectura y responsabilidades
 
-> Los documentos anteriores del repositorio se conservan como referencia
-> histórica; la guía anterior es la fuente de verdad para el arranque actual.
+- **COMPRADOR:** se registra e inicia sesión mediante Auth; la contraseña se almacena con bcrypt en PostgreSQL.
+- **STAFF y ORGANIZADOR:** las cuentas se administran en Keycloak y se sincronizan a PostgreSQL. La contraseña no se duplica en la base de Auth.
+- **JWT RS256:** Auth emite una cookie `jwt` HttpOnly y valida sesiones mediante un endpoint interno protegido. Los roles del contrato son `usuario`, `staff` y `organizador`.
+- **Eventos:** Auth publica solicitudes a `auth.events` y consume confirmaciones desde `notificaciones.events` utilizando el RabbitMQ compartido.
+- **API Gateway:** se utiliza el Gateway oficial de [FWizav/backendticketU](https://github.com/FWizav/backendticketU); no se mantiene otro Gateway en este repositorio.
 
-# Arquitectura - TITEC (Equipo Auth)
+## Inicio rápido y documentación
 
-Este repositorio contiene la estructura base del microservicio de Autenticación, dividido en Backend (NestJS) y Frontend (React).
+La **guía operativa única** de instalación, Docker, API Gateway, puertos, pruebas y usuarios QA se encuentra en [backend/README.md](backend/README.md). No es necesario aplicar los antiguos archivos README de parches para ejecutar el servicio.
 
-## Cómo levantar el proyecto en local
+La estructura principal del repositorio es:
 
-Como el proyecto está dividido en dos partes, necesitas abrir dos terminales distintas.
+| Ruta | Contenido |
+|---|---|
+| `backend/` | API Auth NestJS, Prisma, infraestructura y herramientas de prueba |
+| `frontend/` | Interfaz Next.js del equipo Auth |
+| `docs/` | Diagramas y documentación técnica |
+| `HISTORIAS.md` | Historias de usuario y requisitos funcionales |
+| `CONTRATO_INTEGRACION_AUTH.md` | Contrato HTTP de introspección con otros servicios |
+| `CONTRATO_NOTIFICACIONES_AUTH.md` | Contrato de eventos con Notificaciones |
 
-### Paso 1: Configurar Variables de Entorno
-Por seguridad, las contraseñas no están en GitHub.
+## Estado de comprobación local — 16/11/2026
 
-1. Ve a la carpeta `backend/` y busca el archivo `.env.example`.
-2. Duplica el archivo y renombra la copia a `.env`.
-3. Pide al Scrum Master las credenciales de desarrollo (URL de la base de datos, Keys de Keycloak, RabbitMQ, etc.) por interno y pégalas en ese archivo.
-4. Asegúrate de tener los archivos `private.pem` y `public.pem` en la raíz de la carpeta `backend/`.
+En el entorno Docker de desarrollo se comprobó:
 
-### Paso 2: Levantar el Backend
-En la primera terminal, levanta la infraestructura y el servidor:
+- Auth en `localhost:10000` y el Gateway oficial en `localhost:8080`, ambos respondiendo HTTP 200 en sus rutas de salud.
+- Resolución de `auth-service:10000` desde el Gateway y JWKS público servido a través de `/api/auth/.well-known/jwks.json`.
+- Protección interna: `403` sin `x-api-key` y `401` con clave interna válida pero sin cookie JWT.
+- **Nueve cuentas QA:** 3 compradores, 3 STAFF y 3 organizadores. Las 9 completaron login HTTP 200, recibieron cookie JWT y devolvieron perfil válido HTTP 200 con el rol esperado.
+- Exchanges `auth.events` y `notificaciones.events`, con sus colas de QA y el binding de respuesta `correo_auth` en el broker compartido.
 
-```bash
-cd backend
-docker-compose up -d
-npm install
-npx prisma generate
-npx prisma db push
-npm run start:dev
-```
-## Paso 3: Levantar el Frontend
+Estas pruebas **no** acreditan todavía entrega real de correos ni integración completa con Entradas, Panel o Pagos. Los usuarios QA viven en los volúmenes de PostgreSQL/Keycloak de ese entorno; no se incluyen en las imágenes ni se crean automáticamente al clonar el repositorio.
 
-En la segunda terminal, ejecutar los siguientes comandos:
+## Equipo
 
-```bash
-cd frontend
-npm install
-npm start
-```
-## Miembros del Equipo y Roles
+| Integrante | Función |
+|---|---|
+| Benjamín David Acevedo Jorquera | Frontend |
+| Ricardo Andrés Gil Otalvarez | Integración |
+| Diego Alexander Peña Gutiérrez | QA / Scrum Master |
+| Nataniel Enrique Riquelme Vergara | Backend / Base de datos |
 
-| Nombre | Rol |
-| :--- | :--- |
-| **BENJAMÍN DAVID ACEVEDO JORQUERA** | Frontend |
-| **RICARDO ANDRES GIL OTALVAREZ** | Integración |
-| **DIEGO ALEXANDER PEÑA GUTIÉRREZ** | QA/Master |
-| **NATANIEL ENRIQUE RIQUELME VERGARA** | Backend/BD |
+## Seguridad de desarrollo
 
-## Documentación y Requerimientos
-
-Todo el detalle del proyecto, incluyendo la **Épica**, las **Reglas de Seguridad** y las **Historias de Usuario para Frontend y Backend**, se encuentra documentado en un archivo separado para mantener este espacio limpio.
-
+No subir archivos `.env`, llaves `*.pem`, contraseñas ni cookies JWT. Se utiliza **una clave interna compartida por entorno** entre los backends autorizados; no se necesitan claves individuales por microservicio. Las credenciales de desarrollo no deben reutilizarse en producción ni exponerse a Internet.

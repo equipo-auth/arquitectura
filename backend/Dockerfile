@@ -9,6 +9,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY prisma ./prisma
+# Herramienta opcional solo utilizada por el perfil docker qa-seed.
+COPY tools/crear-usuarios-qa.cjs ./tools/crear-usuarios-qa.cjs
 RUN npm ci && npx prisma generate
 CMD ["npx", "prisma", "db", "push"]
 
