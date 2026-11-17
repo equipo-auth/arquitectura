@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Prueba HTTP real de las 9 cuentas QA TicketU, sin modificar bases ni guardar secretos.
+"""Prueba HTTP real de las 9 cuentas QA TicketU, sin modificar bases ni guardar cookies.
 
-Uso: python3 probar_9_usuarios_titec.py
+Uso: python3 backend/tools/probar-9-usuarios-qa.py
 Prerequisitos: Gateway en localhost:8080, Auth en localhost:10000, Docker activo.
 """
-import getpass
 import json
 import subprocess
 import sys
@@ -13,6 +12,7 @@ import urllib.request
 
 GATEWAY = 'http://localhost:8080'
 AUTH = 'http://localhost:10000'
+QA_PASSWORD = 'TicketuQA2026!'  # Pública, SOLO usuarios de demostración @ticketu.test
 
 # El seed QA estableció una misma contraseña para las nueve cuentas.
 ACCOUNTS = [
@@ -79,7 +79,7 @@ def jwt_from_headers(headers):
 
 def main():
     print('TITEC — comprobación REAL de las 9 cuentas QA (solo lectura)')
-    print('No se crearán usuarios, no se cambiarán contraseñas y no se guardarán cookies.\n')
+    print('No se crearán usuarios ni se cambiarán contraseñas; no se guardarán cookies.\n')
     try:
         for name, url in [('Gateway', GATEWAY + '/health'), ('Auth', AUTH + '/api/health')]:
             code, _, _ = http('GET', url)
@@ -90,10 +90,7 @@ def main():
         print(f'[ERROR DE INFRAESTRUCTURA] {exc}', file=sys.stderr)
         return 2
 
-    password = getpass.getpass('Contraseña usada al crear las nueve cuentas QA (no se mostrará): ')
-    if not password:
-        print('La contraseña no puede estar vacía.', file=sys.stderr)
-        return 2
+    password = QA_PASSWORD
 
     print('\nCuenta                               Login  JWT  Perfil  Rol        Estado')
     print('-' * 87)
@@ -132,7 +129,7 @@ def main():
             print(f'{email:<36} --     --   --      --         ERROR DE RED ({type(exc).__name__})')
 
     print(f'\nRESULTADO: {ok}/9 cuentas con login, cookie y perfil contractual correctos.')
-    print('No se mostraron ni escribieron contraseñas, claves internas o tokens en archivos.')
+    print('JWT y clave interna no se mostraron ni se guardaron; la clave QA pública consta en los README.')
     return 0 if ok == len(ACCOUNTS) else 1
 
 
