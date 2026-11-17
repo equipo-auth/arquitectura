@@ -278,3 +278,14 @@ npm run dev -- -p 3001
 ```
 
 En navegador acceder a `http://localhost:3001`. Las llamadas públicas pasan por el Gateway cuando el frontend está configurado para ello. El frontend no recibe `INTERNAL_API_KEY` ni verifica JWT internamente.
+
+## QA de integración con Notificaciones
+
+Las pruebas de creación de cuentas STAFF/ORGANIZADOR,
+invitaciones por RabbitMQ, monitorización de eventos
+y limpieza de usuarios temporales están documentadas en:
+
+[Herramientas QA de Notificaciones](tools/qa-notificaciones/README.md)
+
+Estas herramientas son exclusivas del entorno Docker local
+de desarrollo y no forman parte del despliegue productivo.
