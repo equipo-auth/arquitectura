@@ -1,0 +1,10 @@
+npm notice run backend@0.0.1 test:e2e
+npm notice run jest --config ./test/jest-e2e.json --runInBand
+PASS test/internal.e2e-spec.ts
+PASS test/app.e2e-spec.ts
+
+Test Suites: 2 passed, 2 total
+Tests:       8 passed, 8 total
+Snapshots:   0 total
+Time:        3.315 s, estimated 4 s
+Ran all test suites.
