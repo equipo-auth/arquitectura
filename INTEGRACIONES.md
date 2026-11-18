@@ -1,7 +1,7 @@
 # TITEC 2026-2 · Evaluación 3 — Integraciones de Auth
 
 **Módulo evaluado:** Autenticación (Auth).
-**Rama de entrega:** sustituir por el nombre exacto entregado en aula virtual (por ejemplo, `workstation`).
+**Rama de entrega:** `workstation` (rama utilizada en el enlace de entrega del equipo).
 **Infraestructura:** una instancia compartida de API Gateway y RabbitMQ en la red Docker `plataforma-eventos-net`.
 **Estado:** I1 evidenciada en pruebas locales con servicios reales; I3 con publicación y retorno observados (comprobar trazas en workstation); **I2 pendiente de validar el consumo por una contraparte real y su acuerdo de contrato**. No confundir el estado local con el resultado de instalación en workstation.
 
