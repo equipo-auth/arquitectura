@@ -70,7 +70,7 @@ export class StaffInvitationWorkerService implements OnModuleInit, OnModuleDestr
           const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').replace(/\/+$/, '');
           const publicada = await this.notifications.sendStaffAccountEmail({
             email_destino: user.email,
-            url: `${frontendUrl}/crear-clave?token=${rawToken}`,
+            url: `${frontendUrl}/auth/crear-clave?token=${rawToken}`,
           });
           if (!publicada) throw new Error('RabbitMQ no confirmó publicación');
           await this.prisma.staffInvitationOutbox.update({ where: { id: invitation.id }, data: {
@@ -82,7 +82,7 @@ export class StaffInvitationWorkerService implements OnModuleInit, OnModuleDestr
           // EXCLUSIVAMENTE PARA DEMO LOCAL. En produccion NUNCA imprimir enlaces/tokens.
           // Esta URL NO se guarda en audit_logs ni en archivos de log persistentes.
           if (process.env.NODE_ENV === 'development' && process.env.DEMO_LOG_INVITATION_URL === 'true') {
-            this.logger.warn(`[DEMO_LOCAL][URL_INVITACION] usuario_uuid=${user.uuid} url=${frontendUrl}/crear-clave?token=${rawToken}`);
+            this.logger.warn(`[DEMO_LOCAL][URL_INVITACION] usuario_uuid=${user.uuid} url=${frontendUrl}/auth/crear-clave?token=${rawToken}`);
             this.logger.warn('[DEMO_LOCAL] RabbitMQ confirmó PUBLICACIÓN; esto NO demuestra entrega de correo SMTP.');
           }
         } catch (error) {

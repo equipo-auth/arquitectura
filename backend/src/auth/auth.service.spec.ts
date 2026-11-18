@@ -312,6 +312,7 @@ describe('AuthService', () => {
         'url',
       ]);
       expect(payload.Id_usuario).toBe('u9');
+      expect(payload.url).toMatch(/\/auth\/restablecer\?token=/);
     });
 
     it('no publica nada si el email no existe (falla silenciosa)', async () => {
@@ -342,7 +343,7 @@ describe('AuthService', () => {
       mockNotificationService.sendRecoveryEmail.mockResolvedValue(true);
       await service.processRecovery('staff@ticketu.cl');
       const evento = mockNotificationService.sendRecoveryEmail.mock.calls[0][0];
-      expect(evento.url).toMatch(/\/crear-clave\?token=/);
+      expect(evento.url).toMatch(/\/auth\/crear-clave\?token=/);
       expect(evento.Id_usuario).toBe('u1');
     });
 

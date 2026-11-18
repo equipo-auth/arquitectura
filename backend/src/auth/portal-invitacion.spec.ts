@@ -37,7 +37,7 @@ describe('Invitación automática al activar un nuevo perfil administrativo', ()
       const evento = notifications.sendStaffAccountEmail.mock.calls[0][0];
       expect(Object.keys(evento).sort()).toEqual(['email_destino', 'url']);
       expect(evento.email_destino).toBe(user.email);
-      expect(evento.url).toMatch(/\/crear-clave\?token=token-solo-prueba$/);
+      expect(evento.url).toMatch(/\/auth\/crear-clave\?token=token-solo-prueba$/);
       expect(prisma.staffInvitationOutbox.update).toHaveBeenCalledWith({
         where: { id: outbox.id },
         data: expect.objectContaining({ status: 'SENT' }),

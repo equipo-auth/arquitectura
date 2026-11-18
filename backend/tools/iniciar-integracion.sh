@@ -6,10 +6,12 @@ cd "$ROOT"
 
 PREPARAR_ESQUEMA=0
 SIN_FRONT=0
+USUARIOS_QA=0
 for arg in "$@"; do
   case "$arg" in
     --inicializar-esquema) PREPARAR_ESQUEMA=1 ;;
     --sin-front) SIN_FRONT=1 ;;
+    --usuarios-qa) USUARIOS_QA=1 ;;
     *) echo "Opcion desconocida: $arg" >&2; exit 2 ;;
   esac
 done
@@ -86,6 +88,17 @@ else
 fi
 
 docker compose -f backend/docker-compose.auth-service.yml up -d --build auth-service
+if [[ "$USUARIOS_QA" -eq 1 ]]; then
+  echo "[QA] Creando/verificando 9 cuentas de desarrollo en Keycloak y PostgreSQL..."
+  QA_AUTH_LISTO=0
+  for _ in $(seq 1 60); do
+    if curl --silent --fail --max-time 3 http://localhost:10000/api/health >/dev/null; then QA_AUTH_LISTO=1; break; fi
+    sleep 2
+  done
+  [[ "$QA_AUTH_LISTO" -eq 1 ]] || { echo "Auth no esta listo para el seed QA" >&2; exit 1; }
+  QA_SEED_ALLOW=SI docker compose -f backend/docker-compose.auth-service.yml \
+    --profile qa run --rm --build qa-seed
+fi
 if [[ "$SIN_FRONT" -eq 0 ]]; then
   # Solamente para demostraciones HTTP de un mismo PC; la variable se incrusta durante next build.
   echo '[5/5] Construyendo frontend para localhost (puerto 3001)...'

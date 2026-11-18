@@ -69,7 +69,7 @@ export class AuthController {
         message: 'Debe configurar su contraseña desde la invitación recibida.',
         primer_inicio: true,
         action: 'REDIRECT',
-        url: '/recuperar',
+        url: '/auth/recuperar',
       };
     } 
 

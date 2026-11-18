@@ -248,8 +248,8 @@ export class AuthService {
         : process.env.FRONTEND_URL || 'http://localhost:3001'
     ).replace(/\/+$/, '');
     const recoveryUrl = user.rol === 'COMPRADOR'
-      ? `${frontendUrl}/restablecer?token=${rawToken}`
-      : `${frontendUrl}/crear-clave?token=${rawToken}`;
+      ? `${frontendUrl}/auth/restablecer?token=${rawToken}`
+      : `${frontendUrl}/auth/crear-clave?token=${rawToken}`;
 
     const publicada = await this.notificationService.sendRecoveryEmail({
       Id_usuario: user.uuid, email_destino: user.email, url: recoveryUrl,

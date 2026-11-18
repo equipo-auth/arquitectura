@@ -208,6 +208,66 @@ mantienen la credencial en Keycloak. No se altera `INTERNAL_API_KEY`, secretos d
 RabbitMQ ni usuarios externos a estas nueve identidades. **No usar este seed en producción**
 ni publicar servicios de desarrollo con estas cuentas accesibles desde Internet.
 
+
+### Arranque QA en un solo comando (nueve usuarios del README)
+
+En un **Docker local exclusivamente de desarrollo**, el script de arranque puede crear
+las tres cuentas `comprador`, las tres `staff` y las tres `organizador` de la tabla
+anterior sin que otros equipos deban entrar a PostgreSQL o Keycloak para crearlas.
+Las credenciales son deliberadamente conocidas y no deben usarse en producción.
+
+**Linux**, desde la raíz del proyecto, primera instalación con BD vacía:
+
+```bash
+bash backend/tools/iniciar-integracion.sh --inicializar-esquema --usuarios-qa --sin-front
+```
+
+**Windows / PowerShell**, primera instalación:
+
+```powershell
+.\backend\tools\iniciar-integracion.ps1 -InicializarEsquema -UsuariosQa -SinFrontend
+```
+
+El `--sin-front` / `-SinFrontend` es opcional. En instalaciones posteriores, con
+el esquema ya creado, se omite `--inicializar-esquema` o `-InicializarEsquema`.
+El comando arranca los contenedores existentes que necesita Auth, registra el
+atributo `rut` **solo si falta en el perfil de Keycloak**, crea los usuarios
+faltantes y verifica nueve logins con cookie JWT. Si una cuenta de las nueve ya
+existe, comprueba identidad, RUT y rol antes de tocarla; si coincide y su clave
+QA ya es la esperada, no la modifica ni invalida sesiones.
+
+Si la cuenta QA existia con otra clave y el login falla, **solo en QA** puedes
+restablecer deliberadamente las nueve contrasenas de prueba, asumiendo que
+invalidaras sesiones existentes:
+
+```bash
+QA_SEED_RESET=SI bash backend/tools/iniciar-integracion.sh --usuarios-qa --sin-front
+```
+
+```powershell
+$env:QA_SEED_RESET = 'SI'
+.\backend\tools\iniciar-integracion.ps1 -UsuariosQa -SinFrontend
+Remove-Item Env:QA_SEED_RESET
+```
+
+El arranque normal, sin `--usuarios-qa` / `-UsuariosQa`, **no instala usuarios
+con contrasenas conocidas**. Tampoco lo hace `docker compose up` normal:
+es una proteccion intencional. Los Dockerfile construyen imagenes, no guardan
+usuarios dentro de la imagen; los datos reales quedan en los volúmenes de
+PostgreSQL y Keycloak de cada computador.
+
+Consulta de verificacion:
+
+```bash
+docker exec ticketu-db psql -U admin -d ticketu \
+  -c "SELECT email, rut, rol FROM users WHERE email LIKE '%@ticketu.test' ORDER BY rol, email;"
+```
+
+**Nota:** estas cuentas son de login directo para pruebas integradas: el seed
+cancela su invitacion inicial y establece `cambio_obligatorio=false`. Para
+probar el flujo REAL de invitacion `cuenta_staff` con Notificaciones usa el
+kit `backend/tools/qa-notificaciones/`, que crea una cuenta diferente.
+
 ### Crear o actualizar las nueve cuentas en Docker
 
 Requisitos: PostgreSQL, Keycloak con `ticketu-realm`, RabbitMQ y Auth ya levantados, con
@@ -224,10 +284,11 @@ QA_SEED_ALLOW=SI docker compose -f docker-compose.auth-service.yml \
   --profile qa run --rm --build qa-seed
 ```
 
-El seed **no se ejecuta automáticamente** al hacer `docker compose up`; hay que invocarlo
-explícitamente. Si ya tenías estas nueve cuentas con una contraseña anterior, volver a
-correr el seed **restablece su clave a `TicketuQA2026!`** e incrementa `token_version`,
-invalidando las sesiones anteriores. No elimina volúmenes ni altera otras cuentas.
+El seed manual también sigue disponible. Repetirlo ahora verifica las identidades existentes
+sin cambiar contraseñas ni revocar sesiones; `QA_SEED_RESET=SI` es una opción
+explícita para restablecer contraseñas QA antiguas. No altera usuarios ajenos
+a las nueve cuentas de prueba.
+
 
 ### Verificar las nueve cuentas sin solicitar contraseña
 
@@ -289,3 +350,121 @@ y limpieza de usuarios temporales están documentadas en:
 
 Estas herramientas son exclusivas del entorno Docker local
 de desarrollo y no forman parte del despliegue productivo.
+
+<!-- INICIO: estado-cuentas-qa-docker -->
+## Estado verificado de usuarios QA en Docker (18/11/2026)
+
+**Verificado en el Docker de desarrollo de Auth el 18/11/2026:** las nueve cuentas
+QA del README están creadas y habilitadas. El comprobador
+`python3 backend/tools/probar-9-usuarios-qa.py` finalizó con **9/9 logins HTTP 200,
+9/9 cookies JWT y 9/9 perfiles contractuales HTTP 200**. Los compradores están
+almacenados en PostgreSQL; STAFF y ORGANIZADOR tienen identidad en Keycloak y
+espejo en PostgreSQL.
+
+| Correo | Rol | Contraseña exclusiva QA |
+|---|---|---|
+| `comprador1@ticketu.test` | COMPRADOR | `TicketuQA2026!` |
+| `comprador2@ticketu.test` | COMPRADOR | `TicketuQA2026!` |
+| `comprador3@ticketu.test` | COMPRADOR | `TicketuQA2026!` |
+| `staff1@ticketu.test` | STAFF | `TicketuQA2026!` |
+| `staff2@ticketu.test` | STAFF | `TicketuQA2026!` |
+| `staff3@ticketu.test` | STAFF | `TicketuQA2026!` |
+| `organizador1@ticketu.test` | ORGANIZADOR | `TicketuQA2026!` |
+| `organizador2@ticketu.test` | ORGANIZADOR | `TicketuQA2026!` |
+| `organizador3@ticketu.test` | ORGANIZADOR | `TicketuQA2026!` |
+
+Estas cuentas **están creadas en el entorno local que fue comprobado**, no
+pregrabadas dentro de la imagen Docker. En otro equipo o en una base nueva deben
+inicializarse por primera vez: los datos residen en los volúmenes persistentes de
+PostgreSQL y Keycloak de cada instalación.
+
+### Inicio rápido por sistema operativo
+
+Los comandos siguientes se ejecutan desde la **raíz del repositorio** con
+Docker Desktop (Windows/macOS) o Docker Engine + Compose (Linux) funcionando,
+`backend/.env` configurado y las llaves RSA disponibles.
+
+**Windows (recomendado para la mayoría del equipo) — PowerShell:**
+
+```powershell
+# Si backend/.env no existe, créalo antes usando la plantilla (ver abajo).
+.\backend\tools\iniciar-integracion.ps1 -UsuariosQa -SinFrontend
+```
+
+**macOS — Terminal (zsh):**
+
+```bash
+bash backend/tools/iniciar-integracion.sh --usuarios-qa --sin-front
+```
+
+**Linux — Terminal (bash o zsh):**
+
+```bash
+bash backend/tools/iniciar-integracion.sh --usuarios-qa --sin-front
+```
+
+En una **instalación nueva y vacía**, añadir `-InicializarEsquema` en Windows
+o `--inicializar-esquema` en macOS/Linux. Esta opción prepara el esquema de
+PostgreSQL; **no** debe utilizarse sobre una base con datos sin evaluar antes
+sus cambios. El modo `-UsuariosQa` / `--usuarios-qa` crea o verifica las nueve
+cuentas de desarrollo; un `docker compose up` normal **no** las crea.
+
+**Importante:** las nueve cuentas quedaron comprobadas en la instalación local
+del 18/11/2026. En cada computador nuevo hay que ejecutar el inicio QA una vez,
+porque Dockerfile e imágenes **no contienen usuarios de PostgreSQL ni Keycloak**:
+sus datos se guardan en los volúmenes locales. Nunca ejecutar `docker compose
+down -v` para preparar las cuentas. Si el broker compartido está apagado,
+comprobar primero su estado y administrarlo con el equipo responsable en vez de
+recrearlo.
+
+El seed es **optativo, solo para desarrollo QA**, e idempotente para identidades
+ya verificadas: una nueva ejecución no necesita crear usuarios duplicados ni
+reiniciar sus contraseñas. Si las cuentas antiguas tienen otra clave, la opción
+`QA_SEED_RESET=SI` permite restablecerlas deliberadamente; esto puede invalidar
+sus sesiones. Nunca activar este seed con contraseñas públicas en producción.
+
+En la consulta de validación del 18/11/2026 aparecieron **10 filas**, porque
+además existe `qa.staff@ticketu.test`, desactivada y ajena a las nueve cuentas
+oficiales del seed. No debe contarse como décima cuenta del README.
+
+### Configuración de `backend/.env` a partir de `.env.example`
+
+El archivo **`backend/.env.example` es la plantilla de configuración de
+`backend/.env`**. Deben contener el mismo conjunto de variables necesarias,
+pero **sus valores no tienen por qué ser iguales**: `.env` contiene las
+credenciales y direcciones efectivas de cada instalación. No copiar secretos
+reales a `.env.example` ni subir `.env` a GitHub.
+
+**macOS y Linux** (Terminal, desde la raíz del repositorio):
+
+```bash
+cp -n backend/.env.example backend/.env
+```
+
+**Windows PowerShell** (solo si todavía no existe `backend/.env`):
+
+```powershell
+if (-not (Test-Path backend/.env)) {
+  Copy-Item backend/.env.example backend/.env
+}
+```
+
+En **Windows/macOS** se recomienda Docker Desktop; en macOS los scripts Bash
+son los mismos que en Linux. No se necesita WSL en Windows para ejecutar el
+script PowerShell.
+
+Luego completar en `backend/.env` al menos las credenciales de administración
+de Keycloak, `KEYCLOAK_CLIENT_SECRET`, `INTERNAL_API_KEY` y los demás secretos
+marcados como pendientes en la plantilla. Conservar las claves RSA
+`backend/private.pem` y `backend/public.pem` fuera del control de versiones.
+
+El Compose de Auth utiliza direcciones **internas Docker** para conectarse a
+PostgreSQL, Keycloak y RabbitMQ; por ello no es necesario reemplazar a mano las
+URLs `localhost` del `.env` que sirven para ejecutar NestJS directamente desde
+el host. En producción, también deben configurarse los orígenes públicos reales
+del frontend y nunca usar enlaces `localhost` en correos enviados a usuarios.
+
+**Importante:** si un compañero cambia un valor de `.env.example`, ese cambio
+no actualiza automáticamente su `.env` existente; debe revisar y sincronizar
+manualmente las variables afectadas, sin perder sus secretos locales.
+<!-- FIN: estado-cuentas-qa-docker -->

@@ -56,6 +56,31 @@ async function solicitar(url, options={}) {
 }
 function headers(token) { return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }; }
 
+async function prepararRutKeycloak(token) {
+  // Keycloak 26 no siempre conserva atributos no definidos en User Profile.
+  // Solo se modifica el realm QA local cuando el operador activa QA_SEED_ALLOW=SI.
+  const endpoint = `${kcBase}/admin/realms/${encodeURIComponent(realm)}/users/profile`;
+  let config = await solicitar(endpoint, {headers:headers(token)});
+  exigir(config && Array.isArray(config.attributes),
+    'Keycloak no devolvio User Profile; revisar realm y permisos administrativos');
+  let rut = config.attributes.find(a => a.name === 'rut');
+  if (!rut) {
+    const atributo = {
+      name:'rut', displayName:'RUT', multivalued:false,
+      permissions:{view:['admin'], edit:['admin']},
+    };
+    await solicitar(endpoint, {
+      method:'PUT', headers:headers(token),
+      body:JSON.stringify({...config, attributes:[...config.attributes, atributo]}),
+    });
+    console.log('[KEYCLOAK] atributo rut habilitado en User Profile de QA');
+  }
+  config = await solicitar(endpoint, {headers:headers(token)});
+  rut = config?.attributes?.find(a => a.name === 'rut');
+  exigir(rut && rut.permissions?.view?.includes('admin') && rut.permissions?.edit?.includes('admin'),
+    'El atributo rut no permite lectura/escritura administrativa en Keycloak');
+}
+
 async function adminToken() {
   const data = await solicitar(`${kcBase}/realms/master/protocol/openid-connect/token`, {
     method:'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -93,6 +118,7 @@ async function claveKc(uuid, token) {
 }
 async function crearKc(p, token) {
   let cuenta = await buscarKc(p.email,token);
+  let creada = false;
   if (!cuenta) {
     const nuevo = {username:p.email,email:p.email,enabled:true,emailVerified:true,
       firstName:p.firstName,lastName:p.lastName,attributes:{rut:[p.rut]},requiredActions:[]};
@@ -100,22 +126,44 @@ async function crearKc(p, token) {
       method:'POST',headers:headers(token),body:JSON.stringify(nuevo),
     });
     cuenta = await buscarKc(p.email,token);
-    exigir(cuenta,`Keycloak no creó ${p.email}`);
+    exigir(cuenta,`Keycloak no creo ${p.email}`);
     await aplicarRol(cuenta.id,p.rol,token);
+    creada = true;
     console.log(`[KEYCLOAK] creada cuenta ${p.email} (${p.rol})`);
-  } else {
-    const perfil = await solicitar(`${kcBase}/admin/realms/${encodeURIComponent(realm)}/users/${cuenta.id}`, {headers:headers(token)});
-    const actualRut = Array.isArray(perfil.attributes?.rut) ? perfil.attributes.rut[0] : perfil.attributes?.rut;
-    exigir(actualRut === p.rut && perfil.firstName === p.firstName && perfil.lastName === p.lastName,
-      `La cuenta ${p.email} ya existe con otra identidad. No se modifica.`);
-    exigir(perfil.enabled === true, `Cuenta ${p.email} deshabilitada. Revisar manualmente.`);
-    const adminRoles = (await rolesKc(cuenta.id,token)).map(x=>x.name).filter(x=>['STAFF','ORGANIZADOR'].includes(x));
-    exigir(adminRoles.length === 1 && adminRoles[0] === p.rol, `Rol incorrecto en Keycloak para ${p.email}`);
-    console.log(`[KEYCLOAK] cuenta existente verificada ${p.email}`);
   }
-  // Restablecer contraseña SOLO para estas nueve identidades QA verificadas.
-  await claveKc(cuenta.id,token);
-  // El endpoint provisiona una identidad administrativa sin escribir la clave en PG.
+  const urlPerfil = `${kcBase}/admin/realms/${encodeURIComponent(realm)}/users/${cuenta.id}`;
+  let perfil = await solicitar(urlPerfil,{headers:headers(token)});
+  const roles = (await rolesKc(cuenta.id,token)).map(x=>x.name).filter(x=>['STAFF','ORGANIZADOR'].includes(x));
+  exigir(roles.length === 1 && roles[0] === p.rol,
+    `Rol incorrecto en Keycloak para ${p.email}; no se modifica`);
+  exigir(perfil.enabled === true && perfil.email?.toLowerCase() === p.email &&
+         perfil.firstName === p.firstName && perfil.lastName === p.lastName,
+    `La cuenta ${p.email} ya existe con otra identidad o esta deshabilitada; no se modifica`);
+  const leerRut = u => Array.isArray(u.attributes?.rut) ? u.attributes.rut[0] : u.attributes?.rut;
+  const rutAnterior = leerRut(perfil);
+  if (!rutAnterior && !creada) {
+    // Solo repara una cuenta QA exacta, incompleta, cuyo email, nombre y rol ya coinciden.
+    // Nunca pisa un RUT distinto ni modifica cuentas fuera de las nueve identidades.
+    const atributos = {...(perfil.attributes || {}),rut:[p.rut]};
+    await solicitar(urlPerfil,{
+      method:'PUT',headers:headers(token),body:JSON.stringify({
+        username:perfil.username,email:perfil.email,enabled:perfil.enabled,
+        emailVerified:perfil.emailVerified,firstName:perfil.firstName,
+        lastName:perfil.lastName,attributes:atributos,
+        requiredActions:perfil.requiredActions || [],
+      }),
+    });
+    perfil = await solicitar(urlPerfil,{headers:headers(token)});
+    console.log(`[KEYCLOAK] completado rut faltante de ${p.email}`);
+  }
+  exigir(leerRut(perfil) === p.rut,
+    `Keycloak no conservo el rut ${p.rut} de ${p.email}; revisar User Profile`);
+
+  const espejoPrevio = await prisma.user.findUnique({where:{uuid:cuenta.id}});
+  if (espejoPrevio) exigir(espejoPrevio.email === p.email &&
+        espejoPrevio.rut === p.rut && espejoPrevio.rol === p.rol,
+    `Espejo preexistente no coincide con la identidad QA ${p.email}; no se modifica`);
+  // En cuentas existentes es idempotente; Auth no cambia sus claves en PostgreSQL.
   await solicitar(`${authBase}/api/auth/provision`,{
     method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.INTERNAL_API_KEY || ''},
     body:JSON.stringify({email:p.email}),
@@ -123,24 +171,43 @@ async function crearKc(p, token) {
   const espejo = await prisma.user.findUnique({where:{uuid:cuenta.id}});
   exigir(espejo && espejo.email === p.email && espejo.rut === p.rut && espejo.rol === p.rol,
     `Espejo PostgreSQL no coincide para ${p.email}`);
-  // EXCEPCIÓN SOLAMENTE PARA DEMO: saltar primer inicio por invitación y permitir
-  // que los otros equipos entren con la clave de QA. No hacer en producción.
-  await prisma.$transaction([
-    prisma.user.update({where:{uuid:cuenta.id},data:{cambio_obligatorio:false,activo:true,token_version:{increment:1}}}),
-    prisma.staffInvitationOutbox.updateMany({where:{user_uuid:cuenta.id},data:{status:'CANCELLED',locked_until:null}}),
-    prisma.passwordResetToken.updateMany({where:{user_uuid:cuenta.id,used_at:null},data:{used_at:new Date()}}),
-  ]);
-  console.log(`[QA] habilitada y sincronizada ${p.email} (${p.rol})`);
+
+  // Crear la clave conocida solo en una identidad nueva, seed incompleto o reset explicito.
+  // Un arranque repetido no revoca sesiones ni sobreescribe contrasenas existentes.
+  const activar = creada || !espejoPrevio || espejo.cambio_obligatorio === true ||
+    process.env.QA_SEED_RESET === 'SI';
+  if (activar) {
+    await claveKc(cuenta.id,token);
+    await prisma.$transaction([
+      prisma.user.update({where:{uuid:cuenta.id},data:{
+        cambio_obligatorio:false,activo:true,token_version:{increment:1},
+      }}),
+      prisma.staffInvitationOutbox.updateMany({where:{user_uuid:cuenta.id},data:{
+        status:'CANCELLED',locked_until:null,
+      }}),
+      prisma.passwordResetToken.updateMany({where:{user_uuid:cuenta.id,used_at:null},data:{used_at:new Date()}}),
+    ]);
+    console.log(`[QA] preparada identidad ${p.email} (${p.rol})`);
+  } else {
+    console.log(`[QA] existente sin cambios ${p.email} (${p.rol})`);
+  }
 }
 async function crearComprador(p) {
   const conflicto = await prisma.user.findFirst({where:{OR:[{email:p.email},{rut:p.rut}]}});
-  const hash = await bcrypt.hash(pass,10);
   if (conflicto) {
     exigir(conflicto.email === p.email && conflicto.rut === p.rut && conflicto.rol === 'COMPRADOR',
-      `Colisión de identidad para ${p.email}: revisar BD; no se modificó.`);
-    await prisma.user.update({where:{uuid:conflicto.uuid},data:{password_hash:hash,activo:true,token_version:{increment:1}}});
-    console.log(`[PRISMA] comprador de QA actualizado ${p.email}`);
+      `Colision de identidad para ${p.email}: revisar BD; no se modifico`);
+    if (process.env.QA_SEED_RESET === 'SI') {
+      const hash = await bcrypt.hash(pass,10);
+      await prisma.user.update({where:{uuid:conflicto.uuid},data:{
+        password_hash:hash,activo:true,token_version:{increment:1},
+      }});
+      console.log(`[PRISMA] comprador de QA restablecido ${p.email}`);
+    } else {
+      console.log(`[PRISMA] comprador existente sin cambios ${p.email}`);
+    }
   } else {
+    const hash = await bcrypt.hash(pass,10);
     await prisma.user.create({data:{email:p.email,rut:p.rut,nombre:`${p.firstName} ${p.lastName}`,
       password_hash:hash,rol:'COMPRADOR',token_version:0,activo:true}});
     console.log(`[PRISMA] comprador de QA creado ${p.email}`);
@@ -178,6 +245,7 @@ async function main() {
     'Configura INTERNAL_API_KEY en backend/.env antes de ejecutar');
   await prisma.$connect();
   const token = await adminToken();
+  await prepararRutKeycloak(token);
   console.log('Preparando 3 cuentas COMPRADOR, 3 STAFF y 3 ORGANIZADOR SOLO para QA.');
   for(const p of personas.filter(p=>p.rol==='COMPRADOR')) await crearComprador(p);
   for(const p of personas.filter(p=>p.rol!=='COMPRADOR')) await crearKc(p,token);
