@@ -1,0 +1,65 @@
+asyncapi: 2.6.0
+info:
+  title: TITEC Auth - Eventos de correo
+  version: 1.0.0
+  description: Contrato de mensajería de Auth. Todas las cargas son JSON plano, sin wrapper Nest.
+servers:
+  desarrollo:
+    url: localhost:5672
+    protocol: amqp
+    description: RabbitMQ oficial del equipo Platform (vhost ticketu)
+channels:
+  auth.events/recuperacion_cuenta:
+    description: Exchange topic auth.events, routing key recuperacion_cuenta
+    publish:
+      message:
+        name: recuperacion_cuenta
+        contentType: application/json
+        payload:
+          type: object
+          additionalProperties: false
+          required: [Id_usuario, email_destino, url]
+          properties:
+            Id_usuario: { type: string, format: uuid }
+            email_destino: { type: string, format: email }
+            url: { type: string, format: uri }
+  auth.events/cuenta_staff:
+    description: Exchange topic auth.events, routing key cuenta_staff
+    publish:
+      message:
+        name: cuenta_staff
+        contentType: application/json
+        payload:
+          type: object
+          additionalProperties: false
+          required: [email_destino, url]
+          properties:
+            email_destino: { type: string, format: email }
+            url: { type: string, format: uri }
+  auth.events/auth.staff.primer_inicio_completado:
+    description: Evento de seguridad HU-B9. Consumidores externos deben acordar binding y esquema antes de usarlo.
+    publish:
+      message:
+        name: auth.staff.primer_inicio_completado
+        contentType: application/json
+        payload:
+          type: object
+          additionalProperties: false
+          required: [Id_usuario, email_destino]
+          properties:
+            Id_usuario: { type: string, format: uuid }
+            email_destino: { type: string, format: email }
+  notificaciones.events/correo_auth:
+    description: Exchange topic notificaciones.events, routing key correo_auth, queue auth.correo_auth
+    subscribe:
+      message:
+        name: correo_auth
+        contentType: application/json
+        payload:
+          type: object
+          additionalProperties: false
+          required: [email_destino, estado_envio]
+          properties:
+            email_destino: { type: string, format: email }
+            estado_envio: { type: string, enum: [exitoso, error] }
+            error_envio: { type: string }

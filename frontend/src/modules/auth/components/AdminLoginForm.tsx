@@ -4,7 +4,8 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthApiError, getSession, loginAdmin, logout } from "@/modules/auth/api";
-import { homeForRole, isValidEmail } from "@/modules/auth/validators";
+import { isValidEmail } from "@/modules/auth/validators";
+import { destinoParaRol } from "@/modules/auth/redirect-destinos";
 import styles from "./AuthPlaceholder.module.css";
 
 /** HU-F3: login exclusivo para Organizador / Staff / Admin en /admin/login. */
@@ -41,7 +42,10 @@ export default function AdminLoginForm() {
 
       // Se consulta el rol con la cookie recién emitida (HU-B6).
       const session = await getSession();
-      const destino = session ? homeForRole(session.usuario.rol) : null;
+      const destino = session ? destinoParaRol(session.usuario.rol, window.location.origin, {
+        checkin: process.env.NEXT_PUBLIC_CHECKIN_APP_URL,
+        organizador: process.env.NEXT_PUBLIC_ORGANIZADOR_APP_URL || process.env.NEXT_PUBLIC_PANEL_URL,
+      }) : null;
 
       if (!destino) {
         // Defensa adicional: rol desconocido → se rechaza y se destruye la cookie.
@@ -50,12 +54,8 @@ export default function AdminLoginForm() {
         return;
       }
 
-      if (session?.usuario.rol.toUpperCase() === 'ORGANIZADOR' && process.env.NEXT_PUBLIC_PANEL_URL) {
-        window.location.assign(process.env.NEXT_PUBLIC_PANEL_URL);
-        return;
-      }
-
-      router.replace(destino);
+      if (destino.startsWith("/")) router.replace(destino);
+      else window.location.assign(destino);
     } catch (error) {
       if (error instanceof AuthApiError && error.status === 429) {
         setRateLimited(true);

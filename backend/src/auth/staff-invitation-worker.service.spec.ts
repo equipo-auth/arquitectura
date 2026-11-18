@@ -37,7 +37,7 @@ describe('StaffInvitationWorkerService: entrega outbox', () => {
     expect(auth.generatePasswordResetToken).toHaveBeenCalledWith('kc-uuid', 72 * 60);
     expect(notifications.sendStaffAccountEmail).toHaveBeenCalledWith({
       email_destino: 'staff@t.cl',
-      url: expect.stringMatching(/\/crear-clave\?token=secret-local-token$/),
+      url: expect.stringMatching(/\/auth\/crear-clave\?token=secret-local-token$/),
     });
     expect(prisma.staffInvitationOutbox.update).toHaveBeenCalledWith({
       where: { id: job.id }, data: expect.objectContaining({ status: 'SENT' }),

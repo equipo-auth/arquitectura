@@ -2,7 +2,8 @@
 # .\backend\tools\iniciar-integracion.ps1 [-InicializarEsquema] [-SinFrontend]
 param(
     [switch]$InicializarEsquema,
-    [switch]$SinFrontend
+    [switch]$SinFrontend,
+    [switch]$UsuariosQa
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -86,6 +87,26 @@ if ($InicializarEsquema) {
     Write-Host '[4/5] Esquema Prisma sin modificaciones. En instalacion nueva utiliza -InicializarEsquema.'
 }
 Run-Docker -ArgsDocker @('compose','-f',$auth,'up','-d','--build','auth-service')
+
+if ($UsuariosQa) {
+    Write-Host '[QA] Creando/verificando nueve cuentas QA...'
+    $qaAuthListo = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:10000/api/health' -TimeoutSec 3
+            if ($r.StatusCode -eq 200) { $qaAuthListo = $true; break }
+        } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $qaAuthListo) { throw 'Auth no esta listo para el seed QA.' }
+    $prevQa = $env:QA_SEED_ALLOW
+    try {
+        $env:QA_SEED_ALLOW = 'SI'
+        Run-Docker -ArgsDocker @('compose','-f',$auth,'--profile','qa','run','--rm','--build','qa-seed')
+    } finally {
+        if ($null -eq $prevQa) { Remove-Item Env:QA_SEED_ALLOW -ErrorAction SilentlyContinue }
+        else { $env:QA_SEED_ALLOW = $prevQa }
+    }
+}
 
 if (-not $SinFrontend) {
     Write-Host '[5/5] Construyendo frontend para localhost:3001...'

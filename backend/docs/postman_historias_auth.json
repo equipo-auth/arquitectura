@@ -1,0 +1,393 @@
+{
+  "info": {
+    "name": "TITEC Auth - Historias 2026 - CA1 real",
+    "description": "Peticiones contra NestJS real. NO usar simuladores. Primera alta 201, luego duplicado 409. 200 de sesión requiere cookie jwtReal copiada localmente desde Set-Cookie y uuidPrueba real (NO exportar secretos). Un runner sin preparar la BD no debe considerarse evidencia. HU-B8 válido y HU-B9 válido se prueban manualmente; no automatizar operaciones destructivas con secretos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "HU Salud 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{authBase}}/api/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B7 JWKS publico 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{authBase}}/.well-known/jwks.json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWKS solo claves publicas\", () => { const body=pm.response.json(); pm.expect(body.keys).to.be.an(\"array\").that.is.not.empty; pm.expect(body.keys[0]).to.include.keys(\"kty\", \"n\", \"e\", \"kid\"); pm.expect(body.keys[0]).not.to.have.property(\"d\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B1 registrar COMPRADOR 201 (solo primer run)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Comprador CA1\",\n  \"rut\": \"{{rutPrueba}}\",\n  \"email\": \"{{emailPrueba}}\",\n  \"password\": \"{{passwordPrueba}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"sin password_hash\", () => { pm.expect(pm.response.text()).not.to.include(\"password_hash\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B1 duplicado 409",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Comprador CA1\",\n  \"rut\": \"{{rutPrueba}}\",\n  \"email\": \"{{emailPrueba}}\",\n  \"password\": \"{{passwordPrueba}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B2 login incorrecto 401",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{emailPrueba}}\",\n  \"password\": \"incorrecta\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B2 login correcto 200 y Set-Cookie",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{emailPrueba}}\",\n  \"password\": \"{{passwordPrueba}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Cookie HttpOnly strict\", () => { const c=pm.response.headers.get(\"Set-Cookie\") || \"\"; pm.expect(c).to.include(\"jwt=\"); pm.expect(c).to.match(/HttpOnly/i); pm.expect(c).to.match(/SameSite=Strict/i); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "I1 sin x-api-key 403",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{authBase}}/internal/validar-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "I1 x-api-key correcta y sin cookie 401",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{internalKey}}"
+          }
+        ],
+        "url": "{{authBase}}/internal/validar-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "I1 x-api-key incorrecta 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "incorrecta"
+          }
+        ],
+        "url": "{{authBase}}/internal/validar-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "I1 cookie real + x-api-key 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "jwt={{jwtReal}}"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{internalKey}}"
+          }
+        ],
+        "url": "{{authBase}}/internal/validar-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Respuesta contrato anidada\", () => { const b=pm.response.json(); pm.expect(b.valido).to.eql(true); pm.expect(b.usuario).to.have.keys(\"id_usuario\", \"nombre_completo\", \"rut\", \"correo_electronico\", \"rol\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B6 identidad de UUID real 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{internalKey}}"
+          }
+        ],
+        "url": "{{authBase}}/internal/identidad/{{uuidPrueba}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Solo datos minimos\", () => { pm.expect(Object.keys(pm.response.json()).sort()).to.eql([\"nombre\", \"rut\"]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B6 UUID inexistente 404",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{internalKey}}"
+          }
+        ],
+        "url": "{{authBase}}/internal/identidad/00000000-0000-4000-8000-000000000001"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B8 sin clave administrativa 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/revoke-session",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"target_user_id\": \"{{uuidPrueba}}\",\n  \"reason\": \"Intento no autorizado\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "HU-B9 token inválido 401",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{authBase}}/api/auth/validar-token",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"token-inexistente\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "authBase",
+      "value": "http://localhost:10000"
+    },
+    {
+      "key": "internalKey",
+      "value": ""
+    },
+    {
+      "key": "emailPrueba",
+      "value": "comprador-ca1@ticketu.local"
+    },
+    {
+      "key": "passwordPrueba",
+      "value": "CambiaEstaClaveLocal123!"
+    },
+    {
+      "key": "rutPrueba",
+      "value": "12.345.678-5"
+    },
+    {
+      "key": "uuidPrueba",
+      "value": ""
+    },
+    {
+      "key": "jwtReal",
+      "value": ""
+    }
+  ]
+}

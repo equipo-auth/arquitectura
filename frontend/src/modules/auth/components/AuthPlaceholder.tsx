@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { AuthApiError, loginBuyer, registerBuyer } from "@/modules/auth/api";
+import { destinoParaRol } from "@/modules/auth/redirect-destinos";
 import { formatRut, isValidEmail, isValidRut } from "@/modules/auth/validators";
 import styles from "./AuthPlaceholder.module.css";
 
@@ -105,7 +106,9 @@ export default function AuthPlaceholder() {
       const result = await loginBuyer({ email, password });
       form.reset();
       setErrors({});
-      const destino = destinoDespuesDelLogin();
+      const destino = destinoDespuesDelLogin() ?? destinoParaRol("COMPRADOR", window.location.origin, {
+        entradas: process.env.NEXT_PUBLIC_ENTRADAS_APP_URL,
+      });
       setMessage({
         kind: "success",
         text: destino

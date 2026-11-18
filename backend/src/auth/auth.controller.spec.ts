@@ -45,7 +45,7 @@ describe('AuthController', () => {
     expect(res.status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN);
     expect(body.primer_inicio).toBe(true);
     expect(body.action).toBe('REDIRECT');
-    expect(body.url).toBe('/recuperar');
+    expect(body.url).toBe('/auth/recuperar');
     expect(mockAuthService.generatePasswordResetToken).not.toHaveBeenCalled();
     expect(res.cookie).not.toHaveBeenCalled();
   });
