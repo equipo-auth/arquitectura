@@ -57,6 +57,9 @@ curl -s -o /dev/null -w 'Gateway provision sin clave: HTTP %{http_code}\n' \
 
 ### I3 — Broker y Notificaciones (BR1)
 
+**Evidencia local:** [BR1 Auth ↔ Notificaciones](docs/evidencias/e3/BR1_AUTH_NOTIFICACIONES.md).
+
+
 Ruta de eventos acordada en [`CONTRATO_NOTIFICACIONES_AUTH.md`](CONTRATO_NOTIFICACIONES_AUTH.md):
 
 ```text
