@@ -1,6 +1,6 @@
 # Plataforma de Eventos — Front-end
 
-Este repositorio es la **base común del front-end**, entregada por el *platform team*.
+Esta carpeta es una **copia de desarrollo y QA local** de la base frontend; el frontend común actual de Platform para workstation vive en [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec), no aquí.
 Está hecha en **Next.js** (un framework construido sobre React, que además trae el sistema
 de rutas y la estructura de carpetas ya resuelta).
 
@@ -263,12 +263,12 @@ Gateway, y el de cada uno de los 9 microservicios — declara esa misma red como
 quedan en la misma red aunque se levanten con comandos `docker compose up` distintos, desde
 carpetas distintas.
 
-Una vez que el Gateway esté corriendo en esa red compartida, actualicen
-`NEXT_PUBLIC_GATEWAY_URL` para apuntar al **nombre del servicio** del Gateway dentro de esa
-red (no a `localhost`) — por ejemplo, si el servicio del Gateway se llama `gateway` en su
-`docker-compose.yml`, la URL dentro de la red Docker sería algo como
-`http://gateway:8080`. Pregúntenle al equipo/persona a cargo del Gateway cuál es el nombre
-exacto de su servicio y en qué puerto expone la API.
+Las variables `NEXT_PUBLIC_*` se incrustan en el **navegador** durante `next build`.
+La URL pública del Gateway debe ser accesible desde el **navegador** (por ejemplo
+`http://localhost:8080` si se accede a ambos desde el mismo computador).
+**No** poner `http://gateway:8080` ni `http://ticketu-api-gateway:8080` en una variable
+`NEXT_PUBLIC_GATEWAY_URL` destinada al navegador: esos nombres se resuelven dentro de Docker,
+no necesariamente en el equipo que abre la web. La comunicación backend-backend SÍ usa DNS de Docker.
 
 **Resumen del orden para levantar todo el ecosistema:**
 1. Crear la red compartida (una sola vez): `docker network create plataforma-eventos-net`
@@ -284,7 +284,7 @@ exacto de su servicio y en qué puerto expone la API.
 
 Esta sección se anexa al README existente; no requiere crear carpetas ni modificar Dockerfiles.
 
-**Puertos existentes: no reasignarlos.** El frontend Next.js oficial Auth se publica en **3001** mediante `frontend/docker-compose.yml` (`3001:3000`). En ejecución nativa, hay que fijar el puerto explícitamente; `next dev` sin argumento usa 3000, que está reservado por Entradas cuando se levanta su Docker Compose.
+**Puertos existentes: no reasignarlos.** La **copia local QA** de Auth se publica en **3001** mediante `frontend/docker-compose.yml` (`3001:3000` por defecto). El frontend **oficial común para evaluación** lo administra Platform en `FWizav/FrontendTitec` y se publica en **3000**. En ejecución nativa, hay que fijar el puerto explícitamente; `next dev` sin argumento usa 3000, que corresponde al frontend común de Platform cuando se levanta `FrontendTitec`.
 
 ### Desarrollo nativo con Gateway real
 

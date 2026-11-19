@@ -2,7 +2,7 @@
 
 NestJS + Prisma/PostgreSQL + Keycloak + RabbitMQ. Esta guía reúne el arranque, las rutas, las pruebas y la integración con el API Gateway oficial, sin documentación temporal de parches.
 
-**Workstation Windows:** consultar [`../INSTALACION_WINDOWS.md`](../INSTALACION_WINDOWS.md) y usar PowerShell + Docker Desktop; los comandos Bash de esta guía son referencias para Linux.
+**Workstation Windows:** consultar [`../INSTALACION_WINDOWS.md`](../INSTALACION_WINDOWS.md) y utilizar el frontend común [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec) en `localhost:3000`. El `frontend/` dentro de este repo es solo una copia de QA (`3001`). Con `-InfraExistente` el script PowerShell omite esa copia automáticamente. Los comandos Bash de esta guía son referencias locales de Linux.
 
 ## 1. Requisitos y distribución
 
@@ -19,7 +19,8 @@ NestJS + Prisma/PostgreSQL + Keycloak + RabbitMQ. Esta guía reúne el arranque,
 | Keycloak de Auth | `localhost:8081` | `ticketu-keycloak:8080` |
 | RabbitMQ compartido | `localhost:5672` | `ticketu-rabbitmq:5672` |
 | Consola RabbitMQ | `localhost:15672` | Puerto de administración |
-| Frontend Auth (Next.js) | `localhost:3001` | Según su Compose |
+| Frontend común de Platform | `localhost:3000` | Repo separado `FWizav/FrontendTitec` |
+| Copia frontend Auth, solo QA local | `localhost:3001` | Según Compose opcional Auth |
 | Entradas (Compose revisado) | `localhost:3003` | `entradas-service:3000` |
 | Panel Organizador (Vite, local) | `localhost:5173` | Backend separado |
 | Notificaciones | Por confirmar con ese equipo | `notificaciones-service`, puerto por confirmar |

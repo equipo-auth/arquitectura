@@ -1,6 +1,6 @@
 # TITEC 2026-2 · Evaluación 3 — Instalación y comprobación de Auth en workstation
 
-Esta guía es de **Auth solamente**. **Para la workstation Windows del ayudante utilizar [`INSTALACION_WINDOWS.md`](INSTALACION_WINDOWS.md) con PowerShell y Docker Desktop.** Los comandos Bash de abajo son referencias para Linux/macOS. Su fuente operativa más extensa es [`backend/README.md`](backend/README.md). El Gateway, RabbitMQ y los otros ocho microservicios son infraestructura o servicios de **otros equipos**: **no se deben reinstalar, reconstruir, detener ni borrar sus volúmenes** desde este procedimiento.
+Esta guía es de **Auth solamente**. **En workstation Windows el frontend oficial es [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec) en el puerto 3000**. Para levantar solo Auth utilizar [`INSTALACION_WINDOWS.md`](INSTALACION_WINDOWS.md). La carpeta `frontend/` de este repositorio es una copia local QA (puerto 3001), no el frontend común. Los comandos Bash de abajo son referencias para Linux/macOS. Su fuente operativa más extensa es [`backend/README.md`](backend/README.md). El Gateway, RabbitMQ y los otros ocho microservicios son infraestructura o servicios de **otros equipos**: **no se deben reinstalar, reconstruir, detener ni borrar sus volúmenes** desde este procedimiento.
 
 ## 1. Requisitos
 
@@ -15,7 +15,8 @@ Esta guía es de **Auth solamente**. **Para la workstation Windows del ayudante 
 | Componente | Desde el equipo anfitrión (referencia de QA) | Desde contenedores en `plataforma-eventos-net` |
 |---|---|---|
 | Auth backend | `http://localhost:10000` | `http://auth-service:10000` |
-| Auth frontend | `http://localhost:3001` | contenedor `frontend-front-1:3000` (si está desplegado) |
+| Frontend común Platform (evaluación) | `http://localhost:3000` | servicio del repositorio separado `FWizav/FrontendTitec` (según Platform) |
+| Copia frontend Auth (QA local opcional) | `http://localhost:3001` | `frontend-front-1:3000` (si se despliega la copia) |
 | API Gateway | `http://localhost:8080` | `http://ticketu-api-gateway:8080` |
 | Auth PostgreSQL | `localhost:5433` | `ticketu-db:5432` |
 | Keycloak | `http://localhost:8081` | `http://ticketu-keycloak:8080` |
@@ -63,7 +64,7 @@ bash backend/tools/iniciar-integracion.sh --inicializar-esquema --usuarios-qa --
 
 En una instalación posterior que ya tenga esquema y usuarios QA, **omitir** `--inicializar-esquema`. En workstation compartida coordinar la inicialización con el responsable del ambiente. No ejecutar `QA_SEED_RESET=SI` sin autorización, porque cambia contraseñas de las cuentas de prueba e invalida sesiones. Los usuarios QA no están dentro de las imágenes Docker y deben existir en el volumen PostgreSQL/Keycloak de esa workstation.
 
-5. El frontend Auth es opcional para el backend, pero necesario si el flujo principal se evaluará visualmente. Su Docker Compose es `frontend/docker-compose.yml` y publica `3001:3000`; configurar **en el ambiente de build** `NEXT_PUBLIC_GATEWAY_URL`, `NEXT_PUBLIC_AUTH_API_URL`, `NEXT_PUBLIC_ENTRADAS_APP_URL`, `NEXT_PUBLIC_CHECKIN_APP_URL`, `NEXT_PUBLIC_ORGANIZADOR_APP_URL` con los destinos efectivos autorizados. Estas variables `NEXT_PUBLIC_*` son públicas: **nunca** poner ahí `INTERNAL_API_KEY` u otras credenciales. Ejemplo de reconstrucción **solo del frontend Auth**:
+5. **Solo para QA local independiente:** el frontend duplicado de Auth es opcional y no debe levantarse en workstation con `FrontendTitec` ya instalado. En la evaluación la interfaz visual común la levanta Platform y se accede a `http://localhost:3000/auth` y `/auth/admin/login`. La copia local se reserva para pruebas fuera de ese despliegue. Su Docker Compose es `frontend/docker-compose.yml` y publica `3001:3000`; configurar **en el ambiente de build** `NEXT_PUBLIC_GATEWAY_URL`, `NEXT_PUBLIC_AUTH_API_URL`, `NEXT_PUBLIC_ENTRADAS_APP_URL`, `NEXT_PUBLIC_CHECKIN_APP_URL`, `NEXT_PUBLIC_ORGANIZADOR_APP_URL` con los destinos efectivos autorizados. Estas variables `NEXT_PUBLIC_*` son públicas: **nunca** poner ahí `INTERNAL_API_KEY` u otras credenciales. Ejemplo de reconstrucción **solo del frontend Auth**:
 
 ```bash
 # Solo cuando corresponda reconstruir el frontend del propio equipo Auth:
@@ -98,8 +99,8 @@ python3 backend/tools/probar-9-usuarios-qa.py
 
 ## 5. Flujo principal que puede seguir el ayudante
 
-1. Abrir la web Auth (si está desplegada en workstation). Iniciar sesión como `organizador1@ticketu.test` con contraseña QA desde `/admin/login`.
-2. Comprobar que Auth emite cookie `jwt` y que el navegador **redirige al Panel Organizador real**, sin tener que introducir manualmente el JWT. Si el frontend de Panel no está instalado en workstation, usar el API de Panel ya desplegado por Gateway y documentar la indisponibilidad de la contraparte.
+1. Abrir el frontend común de Platform (`http://localhost:3000/auth/admin/login` en QA local). Iniciar sesión como `organizador1@ticketu.test` con contraseña QA. **No** usar `/admin/login` a secas.
+2. Comprobar que Auth emite cookie `jwt`. Según configuración de `FrontendTitec`, la navegación puede ir a `/organizador` del mismo frontend o a un Panel externo; comprobar el destino real con Platform, sin afirmar redirección externa automáticamente. Si el frontend de Panel no está instalado en workstation, usar el API de Panel ya desplegado por Gateway y documentar la indisponibilidad de la contraparte.
 3. Consultar `Mis eventos` (o endpoint protegido equivalente del contrato de Panel): organizador recibe `200`. Cerrar sesión y comprobar con `comprador1@ticketu.test` que el acceso administrativo devuelve `403`.
 4. Sin cookie, comprobar `GET /api/auth/validar-sesion` → `401`; con token alterado → `401`.
 5. Para comprobar el broker, solicitar recuperación de contraseña de `comprador1@ticketu.test` mediante el frontend o `POST /api/auth/recover` por Gateway y observar publicación/consumo/resultado en los logs y colas. Un `200` de recuperación **no demuestra envío de correo**. No compartir las URLs temporales.

@@ -1,79 +1,116 @@
-# Auth TITEC - workstation Windows (PowerShell + Docker Desktop)
+# Auth TITEC — Workstation Windows / Frontend compartido
 
-Esta guia es para **Windows**, no Linux. Docker Desktop ejecuta contenedores Linux; PowerShell 5.1 o 7 administra Docker Compose.
+**Rama Auth entregada:** `equipo-auth/arquitectura`, `workstation`.
+**Frontend oficial de Platform:** [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec).
+**Esta guía SOLO levanta Auth**, no el conjunto de microservicios.
 
-**Alcance:** instalar SOLO Auth. No reiniciar, eliminar ni recrear el Gateway, RabbitMQ u otras celulas. Prohibidos `docker compose down -v`, `--remove-orphans` y `docker system prune` en el ambiente compartido.
+## 1. Arquitectura que se evalúa
 
-## 1. Obtener la rama exacta
+| Componente | Responsable | Dirección en navegador (QA local) |
+|---|---|---|
+| Frontend único compartido | Platform / `FWizav/FrontendTitec` | `http://localhost:3000` |
+| Login de compradores | `FrontendTitec` | `http://localhost:3000/auth` |
+| Login administrativo | `FrontendTitec` | `http://localhost:3000/auth/admin/login` |
+| API Gateway | Platform | `http://localhost:8080` |
+| Backend Auth | Equipo Auth | `http://localhost:10000` |
+| Keycloak / PostgreSQL / RabbitMQ | Infraestructura propia o compartida | `8081` / `5433` / `5672` (referenciales) |
 
-Desde PowerShell en el repositorio clonado:
+**`frontend/` dentro de nuestro repositorio es una copia local de desarrollo**, publicada opcionalmente en `3001`. **No es la interfaz común de evaluación.** No levantar ambos frontends por defecto. `-InfraExistente` fuerza omitir la copia local incluso si olvidan `-SinFrontend`.
+
+`FrontendTitec` ya tiene en `main` las rutas `/auth` y `/auth/admin/login`, pero el **responsable de Platform debe indicar qué rama/commit usará en evaluación**. Su `docker-compose.yml` publica `3000:3000` y levanta solo el frontend; no levanta los nueve backends. Este fix NO modifica ese repositorio.
+
+## 2. Preflight Windows (PowerShell, Docker Desktop)
+
+Abrir Windows PowerShell 5.1/7 en la raíz del repositorio Auth. Docker Desktop debe ejecutar contenedores Linux.
 
 ```powershell
-git branch --show-current # workstation
+git branch --show-current
+# Esperado: workstation
 docker info
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 docker network inspect plataforma-eventos-net
-docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'
+Test-Path .\backend\.env
+Test-Path .\backend\private.pem
+Test-Path .\backend\public.pem
 ```
 
-La entrega es `https://github.com/equipo-auth/arquitectura/tree/workstation`. Confirmar puertos, nombres y credenciales con plataforma; un contenedor en marcha no implica que la base Auth este inicializada.
-
-## 2. Preparar configuracion privada
+**Secretos:** `backend/.env`, `private.pem` y `public.pem` son privados y no están en Git. Si `backend/.env` no existe en una instalación nueva, copiar `.env.example` sin sobrescribir nada:
 
 ```powershell
-if (-not (Test-Path .\\backend\\.env)) { Copy-Item .\\backend\\.env.example .\\backend\\.env }
-notepad .\\backend\\.env
-Test-Path .\\backend\\private.pem
-Test-Path .\\backend\\public.pem
+if (-not (Test-Path .\backend\.env)) {
+    Copy-Item .\backend\.env.example .\backend\.env
+}
+notepad .\backend\.env
 ```
 
-Configurar `KEYCLOAK_ADMIN_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`, `INTERNAL_API_KEY`, DB y RabbitMQ para **esta workstation**. Los secretos y llaves RSA **NO** se suben a GitHub. Si faltan AMBAS llaves RSA en un despliegue nuevo, crear desde `backend`: `node .\\tools\\generar-llaves.mjs` (Node 22+). Si ya existe alguna llave, revisar antes de generar, para no invalidar sesiones.
+Usar credenciales **reales de esa workstation** para Keycloak, `INTERNAL_API_KEY` compartida, PostgreSQL y RabbitMQ. Si faltan **ambas** llaves RSA, y la instalación es realmente nueva, generar dentro de `backend` con Node.js 22+: `node .\tools\generar-llaves.mjs`. Si ya existe alguna llave, conservarla e investigar antes de crear otra.
 
-## 3. Arranque sin alterar infraestructura compartida
+En `backend/.env`, configurar `FRONTEND_URL` y `COMPRADOR_FRONTEND_URL` para el frontend común usado en esa máquina, típicamente `http://localhost:3000`. Auth los usa para enlaces de invitación y recuperación. **No enviar secretos por Discord ni subirlos a Git.**
 
-El parametro `-InfraExistente` evita `docker compose up` de PostgreSQL/Keycloak/RabbitMQ y valida su disponibilidad. Desde la raiz:
+Si un script descargado aparece bloqueado, solicitar autorización para ejecutar scripts locales: `Unblock-File .\backend\tools\iniciar-integracion.ps1` y `Set-ExecutionPolicy -Scope Process RemoteSigned`. No alterar políticas globales ni evitar restricciones corporativas.
+
+## 3. Infraestructura existente: no reiniciar servicios ajenos
+
+El parámetro `-InfraExistente` comprueba que estén en marcha `ticketu-db`, `ticketu-keycloak` y `ticketu-rabbitmq`, y que puedan conectarse por `plataforma-eventos-net`. **No los construye, reinicia ni elimina.** El Gateway es del equipo Platform y también debe estar operativo.
 
 ```powershell
-.\\backend\\tools\\iniciar-integracion.ps1 -InfraExistente -SinFrontend
+.\backend\tools\iniciar-integracion.ps1 -InfraExistente -SinFrontend
 ```
 
-Si la base Auth es nueva y el ayudante autoriza crear el esquema y las nueve cuentas QA:
+Si la **base Auth está completamente vacía** y el ayudante autoriza inicializar esquema y usuarios QA, solamente entonces:
 
 ```powershell
-.\\backend\\tools\\iniciar-integracion.ps1 -InfraExistente -InicializarEsquema -UsuariosQa -SinFrontend
+.\backend\tools\iniciar-integracion.ps1 -InfraExistente -InicializarEsquema -UsuariosQa -SinFrontend
 ```
 
-Si el esquema existe y faltan solo usuarios QA: `-InfraExistente -UsuariosQa -SinFrontend` (sin `-InicializarEsquema`). No ejecutar `QA_SEED_RESET=SI` sin autorizacion. Para un ambiente completamente aislado de desarrollo se puede omitir `-InfraExistente`, pero no en la workstation compartida.
-
-Si Windows bloquea scripts PowerShell, coordinar con el ayudante la politica permitida; `Set-ExecutionPolicy -Scope Process RemoteSigned` solo modifica esa sesion, no la politica global.
-
-## 4. Frontend Auth y puerto 3001
-
-Notificaciones u otro frontend podria usar el puerto 3001. Comprobar si esta libre antes de iniciar. Para evitar colision, el puerto del frontend Auth se puede cambiar a `3010` con `AUTH_FRONT_PORT`, **sin reiniciar otros equipos**. Ajustar `FRONTEND_URL` y `COMPRADOR_FRONTEND_URL` en `backend/.env` al puerto real.
+Si el esquema ya está creado y faltan únicamente las cuentas de prueba:
 
 ```powershell
-$env:AUTH_FRONT_PORT = '3001'       # o 3010, si el 3001 esta ocupado
-$env:NEXT_PUBLIC_GATEWAY_URL = 'http://localhost:8080'
-$env:NEXT_PUBLIC_AUTH_API_URL = 'http://localhost:8080'
-$env:NEXT_PUBLIC_ORGANIZADOR_APP_URL = 'http://localhost:5173' # adaptar
-$env:NEXT_PUBLIC_ENTRADAS_APP_URL = 'http://localhost:3000'    # adaptar
-docker compose -p frontend -f .\\frontend\\docker-compose.yml up -d --build front
+.\backend\tools\iniciar-integracion.ps1 -InfraExistente -UsuariosQa -SinFrontend
 ```
 
-Las variables `NEXT_PUBLIC_*` se incorporan durante el build. No colocar claves internas en variables publicas. Consultar con cada equipo los puertos efectivamente utilizados en la workstation.
+No ejecutar `-InicializarEsquema` sobre una base existente sin autorización, ni `QA_SEED_RESET=SI` sin aprobación (puede invalidar sesiones).
 
-## 5. Verificacion en PowerShell
-
-En PowerShell 5.1 `curl` puede ser alias de `Invoke-WebRequest`; usar **`curl.exe`**:
+**Problema observado en Windows:** si aparece `ticketu-rabbitmq existe pero esta detenido`, NO ejecutar `docker compose up` de todo el entorno ni eliminar contenedores. Inspeccionar propietario:
 
 ```powershell
-curl.exe -s -o NUL -w 'Auth HTTP %{http_code}\\n' http://localhost:10000/api/health
-curl.exe -s -o NUL -w 'Gateway HTTP %{http_code}\\n' http://localhost:8080/health
-curl.exe -s -o NUL -w 'Sin sesion HTTP %{http_code}\\n' http://localhost:8080/api/auth/validar-sesion
-curl.exe -s -o NUL -w 'Provision sin clave HTTP %{http_code}\\n' -X POST http://localhost:8080/api/auth/provision
-py -3 .\\backend\\tools\\probar-9-usuarios-qa.py
-.\\backend\\tools\\verificar-integracion.ps1
+docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+$x = docker inspect ticketu-rabbitmq | ConvertFrom-Json
+$x[0].Config.Labels.'com.docker.compose.project'
 ```
 
-Esperado: 200, 200, 401, 403 y 9/9 QA si el seed se ejecuta. Si no existe `py`, usar `python` con Python 3 instalado.
+Si corresponde a la instalación propia y hay autorización, el responsable puede ejecutar `docker start ticketu-rabbitmq`. Si pertenece a otra célula, debe resolverlo el administrador de la workstation. No duplicar broker ni publicar contraseñas.
 
-**Para la evaluacion:** AU1 requiere un backend consumidor real (Panel); BR1 requiere logs de eventos y respuesta mas `audit_logs`. **GW1 sigue PENDIENTE:** `/provision` es una operacion no JWT, pero aun no se demostro un consumidor real a traves del Gateway. Se retiro la pantalla experimental "Mis notificaciones" porque no corresponde al alcance funcional de Auth. No declarar GW1 logrado sin evidencia de otro modulo, contrato y trazas.
+## 4. Frontend único de Platform
+
+Si el frontend compartido YA está arriba, **no ejecutar Compose nuevamente**. Comprobar:
+
+```powershell
+curl.exe -I http://localhost:3000/auth
+curl.exe -I http://localhost:3000/auth/admin/login
+```
+
+Si aún no existe, **el responsable de Platform** debe instalar o levantar [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec), con la rama/commit oficialmente acordados, desde su propia carpeta y Compose. Su variable pública `NEXT_PUBLIC_GATEWAY_URL` debe apuntar a la dirección del Gateway **accesible desde el navegador** (por ejemplo, `http://localhost:8080` cuando ambos servicios se exponen en esa misma workstation). En la build de Next.js también revisar `NEXT_PUBLIC_AUTH_API_URL` si se usa para Auth, y la configuración del destino Panel. Estas variables se incorporan en tiempo de build.
+
+El Dockerfile de `FrontendTitec/main` **no expone actualmente todas las variables de redirección como argumentos de compilación**: la existencia de `/organizador` no certifica una redirección automática a un Panel externo. Esto se debe coordinar con Platform. **No alterar `FWizav/FrontendTitec` desde el repositorio Auth.**
+
+## 5. Comprobaciones tras instalar
+
+```powershell
+.\backend\tools\verificar-integracion.ps1 -FrontendComun
+py -3 .\backend\tools\probar-9-usuarios-qa.py
+```
+
+El verificador comprueba Keycloak, health de Auth, health del Gateway y que `3000/auth` y `3000/auth/admin/login` respondan HTTP 200. **No simula un login real**. El segundo script comprueba 9 cuentas QA, cookies y roles cuando el seed está preparado; si Python está instalado como `python`, usar ese comando en lugar de `py -3`.
+
+En navegador: entrar a `http://localhost:3000/auth` con `comprador1@ticketu.test`, y a `http://localhost:3000/auth/admin/login` con `organizador1@ticketu.test` (clave QA `TicketuQA2026!`, exclusivamente de pruebas). Comprobar cookie `jwt` HttpOnly, el rol esperado y el consumo de introspección desde el backend de Panel.
+
+La prueba de AU1 exige respuesta real del **backend** consumidor de Panel (organizador 200, comprador 403, sin cookie 401). BR1 exige la publicación `auth.events / recuperacion_cuenta` y el retorno `notificaciones.events / correo_auth` (un error SMTP no demuestra correo entregado). GW1 **sigue pendiente** de otro backend consumidor real vía Gateway y contrato acordado: la mera publicación de `/provision` no lo acredita.
+
+## 6. Límites y precauciones
+
+- No usar `backend/tools/iniciar-todo.ps1` en workstation compartida; es para desarrollo aislado.
+- No ejecutar `docker compose down -v`, `docker system prune`, `--remove-orphans` ni recrear contenedores de otros grupos.
+- No compartir `.env`, `private.pem`, cookies JWT ni `INTERNAL_API_KEY` por canales comunes.
+- No levantar la copia de `frontend/` de nuestro Auth en paralelo al frontend común salvo que se autorice una QA local separada.
+- El script PowerShell no certifica Windows hasta que se ejecute en una workstation real; enviar logs sanitizados ante errores.

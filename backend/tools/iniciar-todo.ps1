@@ -1,3 +1,4 @@
+# Solo desarrollo QA AISLADO, NO usar en workstation compartida de Platform.
 # Windows / Docker Desktop. Ejecutar desde la raíz del repo o con ruta absoluta.
 $ErrorActionPreference = 'Stop'
 function Test-DockerCommand {
@@ -45,5 +46,5 @@ if ($newDb) {
     & (Join-Path $root 'backend\tools\iniciar-integracion.ps1')
 }
 if (-not $?) { throw 'Fallo el arranque de integracion.' }
-& (Join-Path $root 'backend\tools\verificar-integracion.ps1')
+& (Join-Path $root 'backend\tools\verificar-integracion.ps1') -FrontendLocal
 if (-not $?) { throw 'Fallo la verificacion HTTP.' }

@@ -1,6 +1,6 @@
 # TITEC / TicketU — Microservicio de Autenticación
 
-Microservicio Auth del proyecto TITEC. Gestiona el registro y las sesiones de compradores, así como la autenticación de personal de organización. Está desarrollado con **NestJS, Prisma/PostgreSQL, Keycloak y RabbitMQ**; el frontend del equipo utiliza **Next.js**.
+Microservicio Auth del proyecto TITEC. Gestiona el registro y las sesiones de compradores, así como la autenticación de personal de organización. Está desarrollado con **NestJS, Prisma/PostgreSQL, Keycloak y RabbitMQ**; la copia frontend del equipo utiliza **Next.js**, pero **la workstation integra el frontend común [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec)**.
 
 ## Arquitectura y responsabilidades
 
@@ -12,14 +12,14 @@ Microservicio Auth del proyecto TITEC. Gestiona el registro y las sesiones de co
 
 ## Inicio rápido y documentación
 
-La **guía operativa única** de instalación, Docker, API Gateway, puertos, pruebas y usuarios QA se encuentra en [backend/README.md](backend/README.md). No es necesario aplicar los antiguos archivos README de parches para ejecutar el servicio.
+La guía de instalación en **Windows/workstation** es [`INSTALACION_WINDOWS.md`](INSTALACION_WINDOWS.md); para desarrollo Linux/macOS, API Gateway, pruebas y usuarios QA ver [backend/README.md](backend/README.md). No es necesario aplicar los antiguos archivos README de parches para ejecutar el servicio.
 
 La estructura principal del repositorio es:
 
 | Ruta | Contenido |
 |---|---|
 | `backend/` | API Auth NestJS, Prisma, infraestructura y herramientas de prueba |
-| `frontend/` | Interfaz Next.js del equipo Auth |
+| `frontend/` | Copia Next.js para QA local del equipo Auth; **no** es el frontend común de la workstation |
 | `docs/` | Diagramas y documentación técnica |
 | `HISTORIAS.md` | Historias de usuario y requisitos funcionales |
 | `CONTRATO_INTEGRACION_AUTH.md` | Contrato HTTP de introspección con otros servicios |

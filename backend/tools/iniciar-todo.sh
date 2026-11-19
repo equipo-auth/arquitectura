@@ -35,4 +35,4 @@ else
   echo 'Volumen o contenedor PostgreSQL existente: NO se modifica el esquema Prisma.'
   bash backend/tools/iniciar-integracion.sh
 fi
-bash backend/tools/verificar-integracion.sh
+bash backend/tools/verificar-integracion.sh --frontend-local

@@ -10,6 +10,13 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $backendEnv = Join-Path $root 'backend\.env'
 
+# En workstation se usa FWizav/FrontendTitec, NO nuestra copia frontend/.
+# Aun si omiten -SinFrontend, -InfraExistente evita construir un segundo front.
+if ($InfraExistente -and -not $SinFrontend) {
+    Write-Warning 'Workstation compartida: se omite el frontend local Auth (3001). Utiliza FrontendTitec del Platform Team (3000).'
+    $SinFrontend = $true
+}
+
 function Test-DockerCommand {
     param([Parameter(Mandatory=$true)][string[]]$ArgsDocker)
     # PowerShell 5.1 puede interpretar stderr de docker como error terminante.
@@ -54,7 +61,7 @@ $infra = Join-Path $root 'backend\docker-compose.yml'
 $auth = Join-Path $root 'backend\docker-compose.auth-service.yml'
 $front = Join-Path $root 'frontend\docker-compose.yml'
 
-Write-Host '[1/5] Levantando PostgreSQL y Keycloak (sin eliminar volumenes)...'
+Write-Host '[1/5] Verificando PostgreSQL y Keycloak (sin eliminar volumenes)...'
 Run-Docker -ArgsDocker @('compose','-f',$infra,'config','--quiet')
 Run-Docker -ArgsDocker @('compose','-f',$auth,'config','--quiet')
 if ($InfraExistente) {
@@ -136,7 +143,7 @@ if ($UsuariosQa) {
 }
 
 if (-not $SinFrontend) {
-    Write-Host '[5/5] Construyendo frontend para localhost:3001...'
+    Write-Host '[5/5] Construyendo COPIA LOCAL del frontend Auth (no FrontendTitec compartido)...'
     $oldAuth = $env:NEXT_PUBLIC_AUTH_API_URL
     $oldGateway = $env:NEXT_PUBLIC_GATEWAY_URL
     try {
@@ -150,4 +157,5 @@ if (-not $SinFrontend) {
 } else { Write-Host '[5/5] Frontend omitido.' }
 Write-Host 'Verificar: http://localhost:8081/realms/ticketu-realm/.well-known/openid-configuration'
 Write-Host 'Verificar: http://localhost:10000/api/health'
-if (-not $SinFrontend) { Write-Host 'Compradores: http://localhost:3001/auth' }
+if (-not $SinFrontend) { Write-Host 'Copia local Auth: http://localhost:3001/auth' }
+if ($InfraExistente) { Write-Host 'Frontend compartido (si Platform lo desplego): http://localhost:3000/auth' }
