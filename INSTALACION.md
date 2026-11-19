@@ -14,7 +14,7 @@ Esta guía es de **Auth solamente**. **En workstation Windows el frontend oficia
 
 | Componente | Desde el equipo anfitrión (referencia de QA) | Desde contenedores en `plataforma-eventos-net` |
 |---|---|---|
-| Auth backend | `http://localhost:10000` | `http://auth-service:10000` |
+| Auth backend | `http://localhost:10000` | `http://auth-service:3000` |
 | Frontend común Platform (evaluación) | `http://localhost:3000` | servicio del repositorio separado `FWizav/FrontendTitec` (según Platform) |
 | Copia frontend Auth (QA local opcional) | `http://localhost:3001` | `frontend-front-1:3000` (si se despliega la copia) |
 | API Gateway | `http://localhost:8080` | `http://ticketu-api-gateway:8080` |
@@ -27,7 +27,7 @@ Estos son valores observados en el **entorno local de integración** del 18/11. 
 
 ### Variables que debe proveer el ambiente
 
-Configurar, sin publicarlas en Git: `DATABASE_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `INTERNAL_API_KEY`, `RABBITMQ_URL`, `RABBITMQ_AUTH_EXCHANGE`, `RABBITMQ_NOTIFICACIONES_EXCHANGE`, `RABBITMQ_AUTH_INBOUND_QUEUE`, `FRONTEND_URL`, `COMPRADOR_FRONTEND_URL` y llaves RSA. En Gateway (administrado por plataforma), el valor correspondiente a Auth es `AUTH_SERVICE_URL=http://auth-service:10000`. La URL pública que emplea el navegador suele ser `NEXT_PUBLIC_AUTH_API_URL=http://localhost:8080` en QA local y debe adaptarse a la workstation. Los destinos de Entradas/Panel/Check-in del frontend de Auth son **URLs de navegación**: dependen del despliegue de cada equipo y no implican que Auth levante esos módulos.
+Configurar, sin publicarlas en Git: `DATABASE_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `INTERNAL_API_KEY`, `RABBITMQ_URL`, `RABBITMQ_AUTH_EXCHANGE`, `RABBITMQ_NOTIFICACIONES_EXCHANGE`, `RABBITMQ_AUTH_INBOUND_QUEUE`, `FRONTEND_URL`, `COMPRADOR_FRONTEND_URL` y llaves RSA. En Gateway (administrado por Plataforma), el destino de Auth es `AUTH_SERVICE_URL=http://auth-service:3000`. Configurar `FRONTEND_URL` y `COMPRADOR_FRONTEND_URL` con el origen del frontend común que abre el usuario (por ejemplo, `http://localhost:3000` si el navegador está en la misma workstation). El frontend usa la URL pública del Gateway, por ejemplo `http://localhost:8080` en QA local.
 
 ## 3. Instalación sin intervenir otros equipos (Linux/macOS; Windows: ver guía enlazada arriba)
 

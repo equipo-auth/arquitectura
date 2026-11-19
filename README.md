@@ -9,6 +9,7 @@ Microservicio Auth del proyecto TITEC. Gestiona el registro y las sesiones de co
 - **JWT RS256:** Auth emite una cookie `jwt` HttpOnly y valida sesiones mediante un endpoint interno protegido. Los roles del contrato son `usuario`, `staff` y `organizador`.
 - **Eventos:** Auth publica solicitudes a `auth.events` y consume confirmaciones desde `notificaciones.events` utilizando el RabbitMQ compartido.
 - **API Gateway:** se utiliza el Gateway oficial de [FWizav/backendticketU](https://github.com/FWizav/backendticketU); no se mantiene otro Gateway en este repositorio.
+- **Red de workstation:** el Gateway y los demás backends alcanzan Auth en `http://auth-service:3000` por la red Docker compartida. Desde el host, el puerto publicado es `10000`.
 
 ## Inicio rápido y documentación
 
@@ -47,7 +48,7 @@ contraseñas e invalida sus sesiones previas.
 En el entorno Docker de desarrollo se comprobó:
 
 - Auth en `localhost:10000` y el Gateway oficial en `localhost:8080`, ambos respondiendo HTTP 200 en sus rutas de salud.
-- Resolución de `auth-service:10000` desde el Gateway y JWKS público servido a través de `/api/auth/.well-known/jwks.json`.
+- Resolución de Auth desde el Gateway y JWKS público servido a través de `/api/auth/.well-known/jwks.json`. El destino de la configuración vigente se indica arriba.
 - Protección interna: `403` sin `x-api-key` y `401` con clave interna válida pero sin cookie JWT.
 - **Nueve cuentas QA:** 3 compradores, 3 STAFF y 3 organizadores. Las 9 completaron login HTTP 200, recibieron cookie JWT y devolvieron perfil válido HTTP 200 con el rol esperado.
 - Exchanges `auth.events` y `notificaciones.events`, con sus colas de QA y el binding de respuesta `correo_auth` en el broker compartido.

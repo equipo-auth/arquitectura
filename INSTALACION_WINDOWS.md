@@ -13,6 +13,7 @@
 | Login administrativo | `FrontendTitec` | `http://localhost:3000/auth/admin/login` |
 | API Gateway | Platform | `http://localhost:8080` |
 | Backend Auth | Equipo Auth | `http://localhost:10000` |
+| Auth desde el Gateway y otros contenedores | Equipo Auth | `http://auth-service:3000` en `plataforma-eventos-net` |
 | Keycloak / PostgreSQL / RabbitMQ | Infraestructura propia o compartida | `8081` / `5433` / `5672` (referenciales) |
 
 **`frontend/` dentro de nuestro repositorio es una copia local de desarrollo**, publicada opcionalmente en `3001`. **No es la interfaz común de evaluación.** No levantar ambos frontends por defecto. `-InfraExistente` fuerza omitir la copia local incluso si olvidan `-SinFrontend`.

@@ -31,7 +31,7 @@
    ```
 
 5. El perfil interno devuelve `usuario.rol` normalizado a `usuario`, `staff` u `organizador`. Auth valida firma RS256, expiración, versión de token y vigencia de usuario. Consultar `backend/src/internal/internal.controller.ts`, `backend/src/auth/auth.service.ts` y contrato v1.1 para verificar rechazo de tokens vencidos o revocados.
-6. El servicio consumidor llama a la URL privada de Auth configurada, por ejemplo `AUTH_SERVICE_URL=http://auth-service:10000`, con cookie original y `x-api-key`. Esa ruta interna **no se publica por Gateway**. Verificar que las claves sean variables privadas y que `AUTH_SERVICE_URL` no apunte a `localhost` desde contenedores.
+6. El servicio consumidor llama a la URL privada de Auth configurada, por ejemplo `AUTH_SERVICE_URL=http://auth-service:3000`, con cookie original y `x-api-key`. Usar la red Docker compartida y configurar la clave en variables privadas del backend.
 
 **Evidencia local previa (18/11/2026):** 9/9 logins, 9/9 perfiles correctos; Panel `200` con organizador, `403` con comprador; Pagos y Reseñas consumieron perfiles Auth `200` y rechazaron ausencia de cookie `401`. **Repetir en workstation**: los volúmenes locales no se transfieren con las imágenes Docker.
 
@@ -102,7 +102,8 @@ El `200` es deliberadamente genérico; **no confirma** consumo, publicación ni 
 ## Configuración, contratos y seguridad
 
 - Auth: `backend/.env` **privado**; `INTERNAL_API_KEY`, `DATABASE_URL`, `KEYCLOAK_URL`, `RABBITMQ_URL` y URL del frontend se definen por ambiente.
-- Gateway compartido: ruta `/api/auth/*`, puerto `8080`, variable `AUTH_SERVICE_URL=http://auth-service:10000` desde su red Docker. El gateway no debe exponer `/internal/*`.
+- Gateway compartido: ruta `/api/auth/*`, puerto `8080`, variable `AUTH_SERVICE_URL=http://auth-service:3000` desde su red Docker. El gateway no debe exponer `/internal/*`.
+- Trazabilidad: usar el mismo `X-Request-ID` (UUID) para buscar una solicitud en los registros del Gateway y de Auth. Auth devuelve y guarda ese identificador. Si llega sin UUID válido, genera uno para su auditoría.
 - Broker compartido: `ticketu-rabbitmq:5672`, vhost `ticketu`, `auth.events` y `notificaciones.events`; los nombres exactos se configuran mediante `RABBITMQ_AUTH_EXCHANGE`, `RABBITMQ_NOTIFICACIONES_EXCHANGE` y `RABBITMQ_AUTH_INBOUND_QUEUE`.
 - Auth provee Swagger/OpenAPI en [`backend/docs/swagger.yaml`](backend/docs/swagger.yaml), con documentación operativa en [`backend/README.md`](backend/README.md).
 - No usar contraseñas reales, JWT ni claves internas en capturas, commits o reportes. Los usuarios `@ticketu.test` y su contraseña de desarrollo son exclusivamente ficticios.
