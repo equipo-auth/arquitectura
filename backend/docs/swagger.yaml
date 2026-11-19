@@ -146,6 +146,36 @@ paths:
       responses:
         '200': { description: Invitación en outbox pendiente }
         '403': { description: API Key incorrecta o cuenta no elegible }
+  /api/auth/mis-notificaciones:
+    get:
+      tags: [Auth]
+      summary: GW1 - Consultar centro de avisos de Notificaciones vía API Gateway
+      description: >-
+        Auth valida la sesión y consume GET /api/notificaciones del microservicio
+        Notificaciones a través de API_GATEWAY_URL. No emite ni valida tokens de
+        terceros; solo retransmite la cookie JWT y normaliza la lista recibida.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Lista de avisos del usuario; puede estar vacía
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id_notificacion: { type: string }
+                    tipo: { type: string }
+                    mensaje: { type: string }
+                    estado_lectura: { type: string }
+                    created_at: { type: string }
+        '401': { description: Sesión inválida o caducada }
+        '403': { description: El proveedor rechazó el acceso }
+        '404': { description: Ruta del proveedor no encontrada en el Gateway }
+        '502': { description: Contrato del proveedor incompatible }
+        '503': { description: Proveedor o Gateway no disponible }
+        '504': { description: Tiempo de espera agotado }
   /api/auth/recover:
     post:
       tags: [Auth]

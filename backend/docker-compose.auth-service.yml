@@ -15,6 +15,10 @@ services:
       # Para producción se debe usar NODE_ENV=production + HTTPS.
       NODE_ENV: development
       PORT: "10000"
+      # GW1: salida del propio backend Auth hacia otro módulo SOLO vía Gateway.
+      API_GATEWAY_URL: "${API_GATEWAY_URL:-http://ticketu-api-gateway:8080}"
+      NOTIFICACIONES_API_PATH: "${NOTIFICACIONES_API_PATH:-/api/notificaciones}"
+      NOTIFICACIONES_TIMEOUT_MS: "${NOTIFICACIONES_TIMEOUT_MS:-3000}"
       DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
       KEYCLOAK_URL: "http://ticketu-keycloak:8080"
       RABBITMQ_URL: "${DOCKER_RABBITMQ_URL:-amqp://ticketu:ticketu_dev@ticketu-rabbitmq:5672/ticketu}"

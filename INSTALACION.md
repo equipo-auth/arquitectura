@@ -139,3 +139,17 @@ Para validar GW1 en serio debe obtenerse una traza de **otro módulo** solicitan
 - La entrega inicial de la pauta figura para **miércoles 18/11/2026 23:59** y las correcciones para **jueves 19/11/2026 23:59**, sobre **la misma rama entregada**. Lo evaluado será el commit vigente en esa rama al cerrar las correcciones.
 - No depender de imágenes QA, patches no versionados o volúmenes de una instalación local previa. No ejecutar `docker compose down -v`, no reiniciar servicios de otros equipos, no subir llaves ni `.env`.
 - Antes de hacer commit: `git diff --check`, `git diff --cached --check`, revisar que `git status` no incluya `__pycache__/`, respaldos `.bak` ni scripts `aplicar_*.py`.
+
+## 9. GW1 — Consulta a Notificaciones vía Gateway
+
+Auth también consume `GET /api/notificaciones` desde su backend, pasando exclusivamente por la ruta del Gateway indicada en `API_GATEWAY_URL` y `NOTIFICACIONES_API_PATH`. La pantalla está en `/auth/notificaciones`; no interfiere con el login ni con el flujo principal de Auth.
+
+- Configurar en backend Docker `API_GATEWAY_URL=http://ticketu-api-gateway:8080`, `NOTIFICACIONES_API_PATH=/api/notificaciones` y `NOTIFICACIONES_TIMEOUT_MS=3000`. Estos valores están en `backend/docker-compose.auth-service.yml` y pueden modificarse por el ambiente.
+- Instalar el módulo Notificaciones en la red Docker y configurar su URL en el Gateway. Sin Notificaciones no se puede probar el elemento base de GW1, salvo la excepción de contraparte no disponible de la pauta cuando sea aplicable.
+- Para QA HTTP: `python3 backend/tools/qa-gw1-notificaciones.py` (requiere Gateway público accesible y cuenta QA inicializada).
+- Para UI: entrar al frontend Auth `/auth/notificaciones`; iniciar sesión si se solicita. La página indica lista vacía si Notificaciones responde `[]`.
+- Evidencia: `docker logs ticketu-auth-service --since 5m | grep GW1` y `docker logs ticketu-api-gateway --since 5m | grep module=notificaciones`.
+- Verificación de errores: sin sesión 401; 404/502/503/504 manejados en el controlador; no apagar infraestructura compartida para provocar fallos.
+- Contrato vigente del proveedor: repositorio `Equipo8-notificaciones/notificaciones-ticketu`, rama `New/Backend`, `backend/src/routes/notificacionRoutes.js` (OpenAPI en JSDoc).
+
+**No confundir las pruebas locales con la instalación de la workstation universitaria.**
