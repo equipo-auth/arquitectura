@@ -105,7 +105,7 @@ Usa el Gateway del repo `FWizav/backendticketU`, no construyas uno nuevo. En su 
 ```dotenv
 PORT=8080
 CORS_ORIGINS=http://localhost:3001,http://localhost:5173
-AUTH_SERVICE_URL=http://auth-service:10000
+AUTH_SERVICE_URL=http://auth-service:3000
 ```
 
 Gateway debe estar en `plataforma-eventos-net` igual que `auth-service`; Docker lo resuelve por nombre de servicio. Luego:
@@ -118,7 +118,7 @@ curl -i http://localhost:8080/api/auth/.well-known/jwks.json
 curl -i http://localhost:8080/api/auth/validar-sesion  # 401 sin cookie = esperado
 ```
 
-**No cambies los puertos**: Gateway 8080, Keycloak **8081 en host** (8080 dentro del contenedor), Auth 10000, front compradores 3001, front administrativo de otra célula 5173.
+Puertos del host en QA local: Gateway 8080, Keycloak 8081, Auth 10000, front compradores 3001 y front administrativo de otra célula 5173. Los puertos internos de Keycloak y Auth son 8080 y 3000, respectivamente.
 
 Una vez confirmado Gateway, el frontend compradores puede usar en `.env.local`:
 
@@ -127,9 +127,9 @@ NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
 NEXT_PUBLIC_AUTH_API_URL=http://localhost:8080
 ```
 
-Los otros backends no deben llamar a `/internal/validar-sesion` mediante Gateway: dentro de la red llaman a `http://auth-service:10000/internal/validar-sesion` con `Cookie: jwt=...` y `x-api-key` compartida **solo en el backend**.
+Los otros backends llaman directamente a `http://auth-service:3000/internal/validar-sesion` en la red Docker, con `Cookie: jwt=...` y `x-api-key` compartida **solo en el backend**.
 
-**Límite real de la integración**: la implementación publicada de Panel necesita incorporar `x-api-key` al cliente HTTP; eso es tarea de Panel, no se modifica en este parche. Ningún test local sustituye una prueba conjunta con el consumidor verdadero.
+Coordinar con Panel la URL privada de Auth y la clave interna del ambiente. Repetir la prueba con el consumidor desplegado en la workstation.
 
 ## 4. Pruebas y evidencias
 
