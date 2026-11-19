@@ -51,3 +51,27 @@ No se afirma entrega SMTP exitosa.
 - Debe reproducirse en la workstation universitaria.
 - No se modificaron los servicios de otros equipos.
 - No se adjuntan contraseñas, JWT ni URL con tokens.
+
+## Persistencia de resultado en PostgreSQL
+
+La prueba local del 18/11/2026 confirmó que Auth registra
+en PostgreSQL el resultado informado por Notificaciones.
+
+Consulta utilizada:
+
+SELECT occurred_at, event, outcome, detail
+FROM audit_logs
+WHERE event = 'CORREO_AUTH_RESULT'
+ORDER BY occurred_at DESC
+LIMIT 5;
+
+Resultado observado:
+- Fecha UTC: 2026-11-18 23:07:53.872+00
+- Evento: CORREO_AUTH_RESULT
+- Estado: ERROR
+- Detalle: Notificaciones reportó error
+
+Esto acredita la persistencia del resultado de la notificación,
+pero no una entrega SMTP exitosa.
+
+La prueba debe repetirse en workstation universitaria.
