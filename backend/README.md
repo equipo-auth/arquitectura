@@ -2,6 +2,8 @@
 
 NestJS + Prisma/PostgreSQL + Keycloak + RabbitMQ. Esta guía reúne el arranque, las rutas, las pruebas y la integración con el API Gateway oficial, sin documentación temporal de parches.
 
+**Workstation Windows:** consultar [`../INSTALACION_WINDOWS.md`](../INSTALACION_WINDOWS.md) y usar PowerShell + Docker Desktop; los comandos Bash de esta guía son referencias para Linux.
+
 ## 1. Requisitos y distribución
 
 - Docker Engine con Compose, Node.js y npm, Python 3 y curl.

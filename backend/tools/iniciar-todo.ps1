@@ -1,14 +1,22 @@
 # Windows / Docker Desktop. Ejecutar desde la raíz del repo o con ruta absoluta.
 $ErrorActionPreference = 'Stop'
+function Test-DockerCommand {
+    param([Parameter(Mandatory=$true)][string[]]$ArgsDocker)
+    # PowerShell 5.1 puede interpretar stderr de docker como error terminante.
+    # Para los chequeos usamos el codigo de salida sin mostrar secretos.
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & docker @ArgsDocker 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } finally { $ErrorActionPreference = $previous }
+}
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
-& docker info *> $null
-if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop no esta iniciado.' }
+if (-not (Test-DockerCommand -ArgsDocker @('info'))) { throw 'Docker Desktop no esta iniciado.' }
 
-& docker volume inspect backend_postgres_data *> $null
-$volumeExiste = $LASTEXITCODE -eq 0
-& docker inspect ticketu-db *> $null
-$contenedorExiste = $LASTEXITCODE -eq 0
+$volumeExiste = Test-DockerCommand -ArgsDocker @('volume','inspect','backend_postgres_data')
+$contenedorExiste = Test-DockerCommand -ArgsDocker @('inspect','ticketu-db')
 $newDb = (-not $volumeExiste) -and (-not $contenedorExiste)
 
 $python = Get-Command py -ErrorAction SilentlyContinue
@@ -20,8 +28,8 @@ if ($python) {
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el entorno.' }
 
 $names = @(& docker ps --format '{{.Names}}')
-& docker inspect ticketu-rabbitmq *> $null
-if ($LASTEXITCODE -eq 0 -and $names -notcontains 'ticketu-rabbitmq') {
+$brokerExiste = Test-DockerCommand -ArgsDocker @('inspect','ticketu-rabbitmq')
+if ($brokerExiste -and $names -notcontains 'ticketu-rabbitmq') {
     $owner = & docker inspect ticketu-rabbitmq --format '{{index .Config.Labels "com.docker.compose.project"}}'
     if ($owner -eq 'backend') {
         & docker start ticketu-rabbitmq | Out-Null

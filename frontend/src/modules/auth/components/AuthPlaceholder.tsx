@@ -146,10 +146,6 @@ export default function AuthPlaceholder() {
           </p>
         </div>
 
-        <p className={styles.linkRow}>
-          <Link href="/auth/notificaciones">Mis notificaciones</Link>
-        </p>
-
         <div className={styles.tabs} role="tablist" aria-label="Opciones de autenticación">
           <button
             type="button"

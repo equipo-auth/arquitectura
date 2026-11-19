@@ -12,7 +12,7 @@
 | Integración | Tipo | Módulo contraparte | Servicio, ruta en el gateway o tópico | Cómo se evidencia | Dónde verificarlo |
 |---|---|---|---|---|---|
 | **I1** | **A. Autenticación (AU1)** | **Panel Organizador** (Auth es proveedor) | Login `POST /api/auth/login` a través del Gateway; posterior validación servidor-servidor `GET /internal/validar-sesion` en la red interna | Inicio de sesión con `organizador1@ticketu.test`, cookie `jwt` emitida por Auth, consulta de eventos autorizada (`200`); usuario comprador rechazado en Panel (`403`); sin cookie o token inválido (`401`) | `http://localhost:3001/admin/login` → Panel; `GET /api/organizador/v1/panel/eventos/mios` o alias `/api/v1/panel/eventos/mios`, según Gateway instalado; logs de `ticketu-auth-service` y backend de Panel. Contrato: [`CONTRATO_INTEGRACION_AUTH.md`](CONTRATO_INTEGRACION_AUTH.md), Swagger [`backend/docs/swagger.yaml`](backend/docs/swagger.yaml) |
-| **I2** | **B. API Gateway (GW1)** | **Notificaciones** (Auth consumidor HTTP) | Auth `GET /api/auth/mis-notificaciones` consulta `GET /api/notificaciones` del proveedor a través de `API_GATEWAY_URL` | Pantalla `/auth/notificaciones`; script QA sin JWT manual; trazas `GW1` en Auth y `module=notificaciones` en Gateway; HTTP 200 lista (puede estar vacía) | [Procedimiento y contrato](docs/evidencias/e3/GW1_AUTH_CONSUME_NOTIFICACIONES.md); Swagger de Notificaciones en rama `New/Backend` `backend/src/routes/notificacionRoutes.js`; fuente Auth `backend/src/auth/notificaciones-gateway.controller.ts` |
+| **I2** | **B. API Gateway (GW1)** | **Por acordar formalmente con un equipo consumidor; candidato: Panel Organizador** | Servicio **no JWT** ofrecido por Auth: `POST /api/auth/provision` vía `http://<gateway-workstation>:8080/api/auth/provision`, con `x-api-key` privada enviada solo por backend | **Pendiente**: debe existir petición desde el módulo consumidor real, observada por Gateway, y respuesta contractual de Auth. La prueba sin clave (`403`) acredita publicación/protección de ruta, **no** acredita por sí sola el elemento base GW1 | Gateway `GET /health` confirma prefijo `/api/auth`; registro de solicitudes del Gateway y Auth; Swagger [`backend/docs/swagger.yaml`](backend/docs/swagger.yaml), `AuthController.provision` y `AuthService.provisionStaff`. Contrato y dependencia con contraparte deben quedar acordados (ver sección I2) |
 | **I3** | **C. Broker (BR1)** | **Notificaciones** | Auth publica en exchange `auth.events`, clave `recuperacion_cuenta`; Notificaciones consume y responde en `notificaciones.events`, clave `correo_auth`; Auth escucha en cola `auth.correo_auth` | Solicitud real `POST /api/auth/recover` de una cuenta QA; logs `[PUBLICADO]` y `[CORREO_AUTH][ENTREGADO/REBOTADO]`; consola RabbitMQ muestra binding y consumidor, y logs/registro de Notificaciones evidencian el procesamiento | Logs de `ticketu-auth-service` y servicio Notificaciones; RabbitMQ cola `notificaciones.recuperacion_cuenta` y `auth.correo_auth`; contrato [`CONTRATO_NOTIFICACIONES_AUTH.md`](CONTRATO_NOTIFICACIONES_AUTH.md) y código `backend/src/auth/notification.service.ts`, `backend/src/auth/notificaciones.listener.ts` |
 
 ### I1 — Autenticación, rol y sesiones (AU1)
@@ -37,24 +37,26 @@
 
 ### I2 — API Gateway, servicio distinto de tokens (GW1)
 
-**Integración declarada:** Auth **consume** el centro de notificaciones del otro módulo (Notificaciones), no emisión ni validación de JWT. No declarar además `POST /api/auth/provision` como segunda integración I2; ese servicio continúa existiendo, pero **no** se usa para calificar GW1.
+**Evidencia local:** [GW1 Auth proveedor](docs/evidencias/e3/GW1_AUTH_PROVEEDOR.md).
 
-**Dependencia:** la tabla TITEC 2026-2 contempla que Auth recibe confirmaciones de Notificaciones. Esta funcionalidad amplía la consulta al centro de avisos APP, usando su API HTTP publicada. El contrato del proveedor figura en [Notificaciones, rama `New/Backend`, Swagger JSDoc `backend/src/routes/notificacionRoutes.js`](https://github.com/Equipo8-notificaciones/notificaciones-ticketu/blob/New/Backend/backend/src/routes/notificacionRoutes.js). Esa dependencia general existe, aunque la consulta HTTP no está explicitada como tal en la tabla; si se requiere acuerdo inter-módulo adicional para GW1(e), documentarlo sin inventarlo.
 
-**Flujo real:** navegador con cookie Auth `jwt` -> `GET /api/auth/mis-notificaciones` por Gateway -> backend Auth (valida su propia sesión y reenvía únicamente `jwt`) -> `GET /api/notificaciones` por **el mismo API Gateway** -> backend Notificaciones (vuelve a validar la sesión con Auth) -> respuesta JSON de avisos -> Auth muestra lista o estado vacío. No hay llamada directa Auth→Notificaciones.
+**Candidato implementado y documentado por Auth:** `POST /api/auth/provision`. El servicio sincroniza una identidad `STAFF` u `ORGANIZADOR` **ya existente en Keycloak** hacia PostgreSQL y programa una invitación mediante outbox solo si corresponde. No emite ni valida un JWT. La operación está protegida por `x-api-key` de servidor, y se documenta en `backend/docs/swagger.yaml`.
 
-**Configuración:** `API_GATEWAY_URL`, `NOTIFICACIONES_API_PATH`, `NOTIFICACIONES_TIMEOUT_MS`; `NEXT_PUBLIC_GATEWAY_URL` para el frontend. El destino no se fija a `localhost` en el backend ni se expone clave privada en el navegador.
+**Aún falta acreditar la integración entre módulos:** debe acordarse qué otro equipo invoca esa operación y registrarlo en el contrato de dependencia. No se debe afirmar que Panel consume `/provision` mientras no exista código/flujo/registro que lo demuestre. La presencia del endpoint y el guard no satisface por sí sola GW1(a). **No publicar `INTERNAL_API_KEY` en variables `NEXT_PUBLIC_*`, código frontend ni ejemplos Git.**
 
-**Cómo verificar en workstation:**
+Comprobación **segura y sin mutaciones** de publicación y guard desde el host de workstation:
 
-1. Configurar e instalar el módulo Notificaciones y su ruta en Gateway. No basta con instalar Auth.
-2. Ejecutar `python3 backend/tools/qa-gw1-notificaciones.py` (utiliza cookie de sesión QA en memoria, sin copiar token); se espera HTTP 200 y un JSON array, aunque esté vacío.
-3. Abrir `/auth/notificaciones`; con sesión ausente se invita a iniciar sesión y volver automáticamente a esa página. Con sesión válida muestra los avisos o estado vacío, sin tokens manuales.
-4. Verificar trazas con fecha: `docker logs ticketu-auth-service --since 5m | grep GW1` y `docker logs ticketu-api-gateway --since 5m | grep 'module=notificaciones'`. Comprobar que no hubo llamada directa al puerto de Notificaciones.
-5. Errores en vivo: sin cookie → 401; la ruta inexistente al proveedor → 404 controlado si lo reporta Gateway; no desconectar servicios compartidos. Timeout y ausencia de Gateway verificados en `backend/src/auth/notificaciones-gateway.controller.ts` y tests `notificaciones-gateway.controller.spec.ts`.
-6. Contrastar el JSON recibido con el Swagger del proveedor y verificar el enlace en [`docs/evidencias/e3/GW1_AUTH_CONSUME_NOTIFICACIONES.md`](docs/evidencias/e3/GW1_AUTH_CONSUME_NOTIFICACIONES.md).
+```bash
+curl -s -o /dev/null -w 'Gateway provision sin clave: HTTP %{http_code}\n' \
+  -X POST -H 'Content-Type: application/json' \
+  -d '{"email":"staff1@ticketu.test"}' \
+  "${GATEWAY_PUBLIC_URL:-http://localhost:8080}/api/auth/provision"
+# Esperado: 403; demuestra que el Gateway resuelve la ruta y Auth exige la clave.
+```
 
-**Estado:** preparado para pruebas reales; no declarar completado GW1(a–e) hasta comprobarlo en workstation. La integración anterior `/provision` se deja solo como evidencia histórica local, no como I2 declarado.
+**Para cerrar GW1(a–e)** antes de evaluar: (a) probar solicitud originada por el backend consumidor real —no curl aislado ni herramienta del propio Auth—; (b) observar el tránsito por Gateway; (c) configurar su URL mediante variable de entorno; (d) verificar errores y timeout (sin apagar servicios de otros equipos); (e) adjuntar acuerdo contractual con la contraparte y Swagger concordante. Si el consumidor no se instala en workstation, documentar explícitamente la excepción de contraparte no disponible de la pauta y mostrar respuesta real de Auth por Gateway, sin usar mocks.
+
+**Alternativas posibles, no declaradas aquí como segunda I2:** `POST /api/auth/update-password` en un flujo real de activación con Panel, o `GET /internal/identidad/:uuid` solo si se diseña una ruta aprobada por Gateway y un módulo contraparte la consume. **No exponer rutas `/internal/*` como público ni afirmar que ya existen esas integraciones.**
 
 ### I3 — Broker y Notificaciones (BR1)
 
