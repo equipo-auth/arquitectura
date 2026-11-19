@@ -39,7 +39,7 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=10000
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -51,7 +51,7 @@ COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 USER node
 
-EXPOSE 3000
+EXPOSE 10000
 
 CMD ["node", "dist/src/main.js"]
 

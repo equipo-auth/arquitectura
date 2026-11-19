@@ -14,12 +14,12 @@ services:
       # En HTTP localhost de desarrollo se mantiene secure=false en la cookie.
       # Para producción se debe usar NODE_ENV=production + HTTPS.
       NODE_ENV: development
-      PORT: "3000"
+      PORT: "10000"
       DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
       KEYCLOAK_URL: "http://ticketu-keycloak:8080"
       RABBITMQ_URL: "${DOCKER_RABBITMQ_URL:-amqp://ticketu:ticketu_dev@ticketu-rabbitmq:5672/ticketu}"
     ports:
-      - "10000:3000"
+      - "10000:10000"
     volumes:
       - type: bind
         source: ./private.pem
@@ -37,7 +37,7 @@ services:
       - plataforma-eventos-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 8
@@ -70,7 +70,7 @@ services:
     environment:
       DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://admin:adminpassword@ticketu-db:5432/ticketu?schema=public}"
       KEYCLOAK_URL: "http://ticketu-keycloak:8080"
-      QA_AUTH_URL: "http://auth-service:3000"
+      QA_AUTH_URL: "http://ticketu-auth-service:10000"
       QA_SEED_ALLOW: "${QA_SEED_ALLOW:-NO}"
       QA_SEED_RESET: "${QA_SEED_RESET:-NO}"
     command: ["node", "tools/crear-usuarios-qa.cjs"]

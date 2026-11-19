@@ -13,7 +13,7 @@ NestJS + Prisma/PostgreSQL + Keycloak + RabbitMQ. Esta guía reúne el arranque,
 
 | Componente | Host de desarrollo | Destino entre contenedores |
 |---|---|---|
-| Auth | `localhost:10000` | `http://auth-service:3000` |
+| Auth | `localhost:10000` | `http://auth-service:10000` |
 | Gateway oficial | `localhost:8080` | `ticketu-api-gateway:8080` |
 | PostgreSQL de Auth | `localhost:5433` | `ticketu-db:5432` |
 | Keycloak de Auth | `localhost:8081` | `ticketu-keycloak:8080` |
@@ -60,7 +60,7 @@ docker compose -f docker-compose.auth-service.yml up -d --build auth-service
 curl -i http://localhost:10000/api/health
 ```
 
-Este Compose **solo** levanta Auth y publica su puerto interno `3000` en el puerto `10000` del host. Los archivos RSA se montan como volúmenes de solo lectura. Si se ejecuta Auth nativo con `npm run start:dev`, usar las URLs `localhost` correspondientes en su `.env` y evitar una segunda instancia en el mismo puerto.
+Este Compose **solo** levanta Auth; no recrea las dependencias ni necesita publicar la base de datos a otros grupos. El puerto interno de NestJS es `10000`. Los archivos RSA se montan como volúmenes de solo lectura. Si se ejecuta Auth nativo con `npm run start:dev`, usar las URLs `localhost` correspondientes en su `.env` y no iniciar otra instancia en el mismo puerto.
 
 ### API Gateway oficial
 
@@ -77,11 +77,11 @@ cd backendticketU/api-gateway
 cp -n .env.example .env
 ```
 
-Coordinar con Plataforma estos valores de desarrollo en el `.env` **del Gateway**:
+Editar el `.env` **del Gateway**, estableciendo estos valores de desarrollo (el ejemplo oficial de Auth con puerto 3000 no corresponde a este backend):
 
 ```dotenv
 PORT=8080
-AUTH_SERVICE_URL=http://auth-service:3000
+AUTH_SERVICE_URL=http://auth-service:10000
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173
 ```
 
@@ -98,7 +98,7 @@ Verificar DNS de Docker sin conflictos de comillas en Zsh:
 
 ```bash
 docker exec ticketu-api-gateway node -e '
-fetch("http://auth-service:3000/api/health")
+fetch("http://auth-service:10000/api/health")
   .then(r => { console.log("Auth interno HTTP:", r.status); process.exit(r.ok ? 0 : 1); })
   .catch(e => { console.error(e.message); process.exit(1); });
 '
@@ -325,8 +325,8 @@ Los tests unitarios y ciertos e2e usan dependencias simuladas; no sustituyen las
 
 ## 6. Integración de otros grupos: pendientes
 
-- **Entradas:** coordinar con su equipo el cambio de la URL de Auth en su Compose a `http://auth-service:3000` y confirmar la clave interna compartida.
-- **Panel Organizador:** su cliente ya envía `x-api-key`. Configurar su URL interna de Auth en `http://auth-service:3000` al probar en la red Docker compartida.
+- **Entradas:** su Compose vigente publica `3003:3000` y apunta a `http://auth-service:10000`. Debe coincidir la `INTERNAL_API_KEY` de los backends. No reemplazar el contrato real por documentación antigua del consumidor.
+- **Panel Organizador:** su cliente de introspección debe incluir `x-api-key` y apuntar a `auth-service:10000`, no a 3000. Corresponde al equipo Panel corregir su backend.
 - **Notificaciones:** su consumidor debe suscribirse a `cuenta_staff` y `recuperacion_cuenta` y publicar `correo_auth` con los campos y mayúsculas acordados. La entrega real de correo sigue pendiente de validación conjunta.
 - **Pagos:** comprobar su código y configuración de integración antes de dar compatibilidad por certificada.
 

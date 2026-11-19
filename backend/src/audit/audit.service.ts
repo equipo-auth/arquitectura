@@ -34,7 +34,6 @@ export class AuditService {
       .slice(0, 300);
 
     const message = `${entry.event} ${entry.outcome}` +
-      (entry.requestId ? ` requestId=${entry.requestId}` : '') +
       (entry.method ? ` ${entry.method}` : '') +
       (safePath ? ` ${safePath}` : '') +
       (entry.statusCode ? ` HTTP=${entry.statusCode}` : '') +

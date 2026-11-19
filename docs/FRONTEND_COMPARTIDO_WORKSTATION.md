@@ -4,7 +4,7 @@
 
 - **Backend Auth:** [`equipo-auth/arquitectura` rama `workstation`](https://github.com/equipo-auth/arquitectura/tree/workstation). Compila y ejecuta `ticketu-auth-service` en `10000`.
 - **Frontend compartido:** [`FWizav/FrontendTitec`](https://github.com/FWizav/FrontendTitec), propiedad de Platform; contiene rutas de todos los equipos. La rama de despliegue la determina Platform.
-- **Gateway:** backend de Platform, puerto `8080`, enruta `/api/auth/*` hacia `auth-service:3000` en Docker. El puerto publicado en el host para Auth es `10000`.
+- **Gateway:** backend de Platform, puerto `8080`, enruta `/api/auth/*` hacia `auth-service:10000`.
 - **Frontend de este repositorio `frontend/`:** QA local independiente, puerto host `3001`, **no requerido** para workstation.
 
 ## Acceso por navegador y rutas reales observadas en FrontendTitec/main

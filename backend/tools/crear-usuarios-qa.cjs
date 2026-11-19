@@ -219,7 +219,7 @@ async function verificarLogin(p) {
     body:JSON.stringify({email:p.email,password:pass,admin:p.rol!=='COMPRADOR'}),
     signal:AbortSignal.timeout(12000),
   });
-  if (res.status === 401 && p.rol === 'STAFF') throw new Error('Login de STAFF devolvió HTTP 401 en Auth/Keycloak. Verifica usuario habilitado, contraseña vigente, realm, cliente y Direct Access Grants; respuesta HTTP y credenciales no se muestran.'); exigir(res.status === 200, `Login de ${p.email} devolvió HTTP ${res.status} en vez de 200`);
+  exigir(res.status === 200, `Login de ${p.email} devolvió HTTP ${res.status} en vez de 200`);
   const cookie = (res.headers.get('set-cookie') || '').split(';')[0];
   exigir(cookie.startsWith('jwt='), `Falta cookie jwt de ${p.email}`);
   const ses = await fetch(`${authBase}/api/auth/validar-sesion`, {
@@ -240,7 +240,7 @@ async function main() {
     'La contraseña de demostración QA debe tener 12+ caracteres con letras y dígitos');
   exigir(dbUrl && bdAprobada(dbUrl), 'DATABASE_URL debe ser la BD local Docker QA');
   exigir(hostAprobado(kcBase,['localhost','127.0.0.1','ticketu-keycloak']), 'Keycloak debe ser el de Docker QA local');
-  exigir(hostAprobado(authBase,['localhost','127.0.0.1','auth-service','ticketu-auth-service']), 'Auth debe ser local Docker QA');
+  exigir(hostAprobado(authBase,['localhost','127.0.0.1','ticketu-auth-service']), 'Auth debe ser local Docker QA');
   exigir(process.env.INTERNAL_API_KEY && process.env.INTERNAL_API_KEY.length >= 12,
     'Configura INTERNAL_API_KEY en backend/.env antes de ejecutar');
   await prisma.$connect();

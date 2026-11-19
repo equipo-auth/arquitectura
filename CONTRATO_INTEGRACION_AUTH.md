@@ -110,14 +110,14 @@ GET /internal/validar-sesion
 
 ```http
 GET /internal/validar-sesion HTTP/1.1
-Host: auth-service:3000
+Host: auth-service:10000
 Cookie: jwt=<JWT_ORIGINAL_EMITIDO_POR_AUTH>
 x-api-key: <CLAVE_INTERNA_COMPARTIDA>
 ```
 
 En esta versión el JWT se transporta **únicamente mediante la cookie `jwt`**. No se acepta `Authorization: Bearer`, el campo `token_sesion` en el cuerpo, ni un JWT generado por otro servicio. Si un backend llama a otro en representación del usuario, debe conservar y reenviar la cookie original conforme al contrato entre esos backends.
 
-`auth-service:3000` es el destino de Auth dentro de la red Docker de workstation. Cada ambiente debe configurar una dirección interna alcanzable. La introspección se llama directamente al backend Auth por la red privada.
+El hostname `auth-service:10000` es ilustrativo para una red Docker; cada ambiente debe configurar una dirección interna real y alcanzable. **No se debe llamar a `/internal/validar-sesion` a través de `http://gateway:8080/api/auth/...`.**
 
 ### 3.3. Validaciones realizadas por Auth
 
@@ -221,7 +221,7 @@ Ejemplo en el backend consumidor (el nombre local de la variable puede variar):
 
 ```dotenv
 AUTH_INTERNAL_API_KEY="<MISMA_CLAVE_SECRETA_DEL_ENTORNO>"
-AUTH_SERVICE_URL="http://auth-service:3000"
+AUTH_SERVICE_URL="http://auth-service:10000"
 ```
 
 El consumidor toma su secreto del entorno y lo añade al header `x-api-key` **solamente al llamar a Auth desde su backend**. El frontend jamás debe conocerlo.
