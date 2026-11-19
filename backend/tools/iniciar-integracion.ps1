@@ -3,20 +3,37 @@
 param(
     [switch]$InicializarEsquema,
     [switch]$SinFrontend,
-    [switch]$UsuariosQa
+    [switch]$UsuariosQa,
+    [switch]$InfraExistente
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $backendEnv = Join-Path $root 'backend\.env'
 
-function Run-Docker {
+function Test-DockerCommand {
     param([Parameter(Mandatory=$true)][string[]]$ArgsDocker)
-    & docker @ArgsDocker
-    if ($LASTEXITCODE -ne 0) { throw "Docker fallo con salida $LASTEXITCODE : docker $($ArgsDocker -join ' ')" }
+    # PowerShell 5.1 puede interpretar stderr de docker como error terminante.
+    # Para los chequeos usamos el codigo de salida sin mostrar secretos.
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & docker @ArgsDocker 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } finally { $ErrorActionPreference = $previous }
 }
 
-& docker info *> $null
-if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop no esta activo.' }
+function Run-Docker {
+    param([Parameter(Mandatory=$true)][string[]]$ArgsDocker)
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & docker @ArgsDocker
+        $exitCode = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previous }
+    if ($exitCode -ne 0) { throw "Docker fallo con salida $exitCode : docker $($ArgsDocker -join ' ')" }
+}
+
+if (-not (Test-DockerCommand -ArgsDocker @('info'))) { throw 'Docker Desktop no esta activo.' }
 foreach ($item in @('backend\.env', 'backend\private.pem', 'backend\public.pem')) {
     if (-not (Test-Path (Join-Path $root $item))) { throw "Falta $item. Lee README-PARCHE-AUTH-DOCKER.md." }
 }
@@ -29,8 +46,10 @@ foreach ($key in @('KEYCLOAK_ADMIN_PASSWORD', 'KEYCLOAK_CLIENT_SECRET', 'INTERNA
     }
 }
 
-& docker network inspect plataforma-eventos-net *> $null
-if ($LASTEXITCODE -ne 0) { Run-Docker -ArgsDocker @('network', 'create', 'plataforma-eventos-net') }
+if (-not (Test-DockerCommand -ArgsDocker @('network','inspect','plataforma-eventos-net'))) {
+    if ($InfraExistente) { throw 'No existe la red compartida; coordina con plataforma.' }
+    Run-Docker -ArgsDocker @('network','create','plataforma-eventos-net')
+}
 $infra = Join-Path $root 'backend\docker-compose.yml'
 $auth = Join-Path $root 'backend\docker-compose.auth-service.yml'
 $front = Join-Path $root 'frontend\docker-compose.yml'
@@ -38,7 +57,15 @@ $front = Join-Path $root 'frontend\docker-compose.yml'
 Write-Host '[1/5] Levantando PostgreSQL y Keycloak (sin eliminar volumenes)...'
 Run-Docker -ArgsDocker @('compose','-f',$infra,'config','--quiet')
 Run-Docker -ArgsDocker @('compose','-f',$auth,'config','--quiet')
-Run-Docker -ArgsDocker @('compose','-f',$infra,'up','-d','db','keycloak')
+if ($InfraExistente) {
+    $runningInfra = @(& docker ps --format '{{.Names}}')
+    foreach ($nombre in @('ticketu-db', 'ticketu-keycloak', 'ticketu-rabbitmq')) {
+        if ($runningInfra -notcontains $nombre) { throw "Falta $nombre; consulta al ayudante antes de iniciar servicios ajenos." }
+    }
+    Write-Host 'Infraestructura compartida existente: no se recrea PostgreSQL ni Keycloak.'
+} else {
+    Run-Docker -ArgsDocker @('compose','-f',$infra,'up','-d','db','keycloak')
+}
 
 $running = @(& docker ps --format '{{.Names}}')
 $existing = @(& docker ps -a --format '{{.Names}}')
@@ -47,11 +74,13 @@ if ($running -contains 'ticketu-rabbitmq') {
 } elseif ($existing -contains 'ticketu-rabbitmq') {
     throw 'ticketu-rabbitmq existe pero esta detenido. Comprueba quien lo administra antes de iniciarlo.'
 } else {
+    if ($InfraExistente) { throw 'Falta RabbitMQ compartido; no se levanta un segundo broker.' }
     Write-Host '[2/5] Iniciando broker de desarrollo propio.'
     Run-Docker -ArgsDocker @('compose','-f',$infra,'up','-d','rabbitmq')
 }
 $networkMembers = @(& docker network inspect plataforma-eventos-net --format '{{range .Containers}}{{println .Name}}{{end}}')
 if ($networkMembers -notcontains 'ticketu-rabbitmq') {
+    if ($InfraExistente) { throw 'RabbitMQ no esta en la red compartida. Coordina con plataforma.' }
     Run-Docker -ArgsDocker @('network','connect','plataforma-eventos-net','ticketu-rabbitmq')
 }
 
@@ -59,10 +88,8 @@ if ($networkMembers -notcontains 'ticketu-rabbitmq') {
 $postgresReady = $false
 $brokerReady = $false
 for ($i = 0; $i -lt 70; $i++) {
-    & docker exec ticketu-db pg_isready -U admin -d ticketu *> $null
-    if ($LASTEXITCODE -eq 0) { $postgresReady = $true }
-    & docker exec ticketu-rabbitmq rabbitmq-diagnostics -q ping *> $null
-    if ($LASTEXITCODE -eq 0) { $brokerReady = $true }
+    if (Test-DockerCommand -ArgsDocker @('exec','ticketu-db','pg_isready','-U','admin','-d','ticketu')) { $postgresReady = $true }
+    if (Test-DockerCommand -ArgsDocker @('exec','ticketu-rabbitmq','rabbitmq-diagnostics','-q','ping')) { $brokerReady = $true }
     if ($postgresReady -and $brokerReady) { break }
     Start-Sleep -Seconds 2
 }
@@ -113,8 +140,8 @@ if (-not $SinFrontend) {
     $oldAuth = $env:NEXT_PUBLIC_AUTH_API_URL
     $oldGateway = $env:NEXT_PUBLIC_GATEWAY_URL
     try {
-        $env:NEXT_PUBLIC_AUTH_API_URL = 'http://localhost:10000'
-        $env:NEXT_PUBLIC_GATEWAY_URL = 'http://localhost:8080'
+        if ([string]::IsNullOrWhiteSpace($env:NEXT_PUBLIC_AUTH_API_URL)) { $env:NEXT_PUBLIC_AUTH_API_URL = 'http://localhost:8080' }
+        if ([string]::IsNullOrWhiteSpace($env:NEXT_PUBLIC_GATEWAY_URL)) { $env:NEXT_PUBLIC_GATEWAY_URL = 'http://localhost:8080' }
         Run-Docker -ArgsDocker @('compose','-f',$front,'up','-d','--build','front')
     } finally {
         $env:NEXT_PUBLIC_AUTH_API_URL = $oldAuth

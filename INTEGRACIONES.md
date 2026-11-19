@@ -37,6 +37,9 @@
 
 ### I2 — API Gateway, servicio distinto de tokens (GW1)
 
+**Evidencia local:** [GW1 Auth proveedor](docs/evidencias/e3/GW1_AUTH_PROVEEDOR.md).
+
+
 **Candidato implementado y documentado por Auth:** `POST /api/auth/provision`. El servicio sincroniza una identidad `STAFF` u `ORGANIZADOR` **ya existente en Keycloak** hacia PostgreSQL y programa una invitación mediante outbox solo si corresponde. No emite ni valida un JWT. La operación está protegida por `x-api-key` de servidor, y se documenta en `backend/docs/swagger.yaml`.
 
 **Aún falta acreditar la integración entre módulos:** debe acordarse qué otro equipo invoca esa operación y registrarlo en el contrato de dependencia. No se debe afirmar que Panel consume `/provision` mientras no exista código/flujo/registro que lo demuestre. La presencia del endpoint y el guard no satisface por sí sola GW1(a). **No publicar `INTERNAL_API_KEY` en variables `NEXT_PUBLIC_*`, código frontend ni ejemplos Git.**
@@ -56,6 +59,9 @@ curl -s -o /dev/null -w 'Gateway provision sin clave: HTTP %{http_code}\n' \
 **Alternativas posibles, no declaradas aquí como segunda I2:** `POST /api/auth/update-password` en un flujo real de activación con Panel, o `GET /internal/identidad/:uuid` solo si se diseña una ruta aprobada por Gateway y un módulo contraparte la consume. **No exponer rutas `/internal/*` como público ni afirmar que ya existen esas integraciones.**
 
 ### I3 — Broker y Notificaciones (BR1)
+
+**Evidencia local:** [BR1 Auth ↔ Notificaciones](docs/evidencias/e3/BR1_AUTH_NOTIFICACIONES.md).
+
 
 Ruta de eventos acordada en [`CONTRATO_NOTIFICACIONES_AUTH.md`](CONTRATO_NOTIFICACIONES_AUTH.md):
 

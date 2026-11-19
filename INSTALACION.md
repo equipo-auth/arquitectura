@@ -1,6 +1,6 @@
 # TITEC 2026-2 · Evaluación 3 — Instalación y comprobación de Auth en workstation
 
-Esta guía es de **Auth solamente**. Su fuente operativa más extensa es [`backend/README.md`](backend/README.md). El Gateway, RabbitMQ y los otros ocho microservicios son infraestructura o servicios de **otros equipos**: **no se deben reinstalar, reconstruir, detener ni borrar sus volúmenes** desde este procedimiento.
+Esta guía es de **Auth solamente**. **Para la workstation Windows del ayudante utilizar [`INSTALACION_WINDOWS.md`](INSTALACION_WINDOWS.md) con PowerShell y Docker Desktop.** Los comandos Bash de abajo son referencias para Linux/macOS. Su fuente operativa más extensa es [`backend/README.md`](backend/README.md). El Gateway, RabbitMQ y los otros ocho microservicios son infraestructura o servicios de **otros equipos**: **no se deben reinstalar, reconstruir, detener ni borrar sus volúmenes** desde este procedimiento.
 
 ## 1. Requisitos
 
@@ -28,7 +28,7 @@ Estos son valores observados en el **entorno local de integración** del 18/11. 
 
 Configurar, sin publicarlas en Git: `DATABASE_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `INTERNAL_API_KEY`, `RABBITMQ_URL`, `RABBITMQ_AUTH_EXCHANGE`, `RABBITMQ_NOTIFICACIONES_EXCHANGE`, `RABBITMQ_AUTH_INBOUND_QUEUE`, `FRONTEND_URL`, `COMPRADOR_FRONTEND_URL` y llaves RSA. En Gateway (administrado por plataforma), el valor correspondiente a Auth es `AUTH_SERVICE_URL=http://auth-service:10000`. La URL pública que emplea el navegador suele ser `NEXT_PUBLIC_AUTH_API_URL=http://localhost:8080` en QA local y debe adaptarse a la workstation. Los destinos de Entradas/Panel/Check-in del frontend de Auth son **URLs de navegación**: dependen del despliegue de cada equipo y no implican que Auth levante esos módulos.
 
-## 3. Instalación sin intervenir otros equipos
+## 3. Instalación sin intervenir otros equipos (Linux/macOS; Windows: ver guía enlazada arriba)
 
 1. Clonar la **rama entregada exacta** o hacer checkout en una copia limpia. No usar archivos temporales de `~/Downloads` como única fuente de la entrega.
 2. Verificar infraestructura existente y preparar `backend/.env` y llaves RSA privadas de Auth. **No reemplazar contraseñas de contenedores existentes ni reutilizar la clave de ejemplo del `.env.example`**.

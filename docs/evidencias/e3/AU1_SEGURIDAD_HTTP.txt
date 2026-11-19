@@ -1,0 +1,4 @@
+Evaluacion 3 — AU1, pruebas HTTP locales
+2026-11-18T20:48:20-03:00
+Sin cookie: HTTP 401
+Cookie alterada: HTTP 401

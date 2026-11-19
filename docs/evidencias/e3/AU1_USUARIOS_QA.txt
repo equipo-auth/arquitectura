@@ -1,0 +1,18 @@
+TITEC — comprobación REAL de las 9 cuentas QA (solo lectura)
+No se crearán usuarios ni se cambiarán contraseñas; no se guardarán cookies.
+
+
+Cuenta                               Login  JWT  Perfil  Rol        Estado
+---------------------------------------------------------------------------------------
+comprador1@ticketu.test              200    SÍ   200     usuario    OK
+comprador2@ticketu.test              200    SÍ   200     usuario    OK
+comprador3@ticketu.test              200    SÍ   200     usuario    OK
+staff1@ticketu.test                  200    SÍ   200     staff      OK
+staff2@ticketu.test                  200    SÍ   200     staff      OK
+staff3@ticketu.test                  200    SÍ   200     staff      OK
+organizador1@ticketu.test            200    SÍ   200     organizador OK
+organizador2@ticketu.test            200    SÍ   200     organizador OK
+organizador3@ticketu.test            200    SÍ   200     organizador OK
+
+RESULTADO: 9/9 cuentas con login, cookie y perfil contractual correctos.
+JWT y clave interna no se mostraron ni se guardaron; la clave QA pública consta en los README.
